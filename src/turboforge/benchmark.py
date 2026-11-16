@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .assistant.config import child_environment
 import json
+import os
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -91,12 +92,21 @@ def parse_bench_output(text: str) -> dict:
     return metrics
 
 
-# The committed upstream corpus. Real text, but 682 distinct ids tiled to 65k
-# tokens; upstream's own docstring says speculative acceptance measured on it is
-# meaningless (a drafter predicts it perfectly). Throughput numbers stay valid.
-DEFAULT_CORPUS_CANDIDATES = (
-    Path(r"D:\llm\ninfer-upstream\bench\fixtures\bench_corpus.ids"),
-)
+# Upstream ships a tiled corpus at this path. Use it when present, or require an
+# explicit --corpus; never invent benchmark input.
+def _default_corpora() -> tuple[Path, ...]:
+    candidates: list[Path] = []
+    override = os.environ.get("TURBOFORGE_BENCH_CORPUS")
+    if override:
+        candidates.append(Path(override))
+    source = os.environ.get("TURBOFORGE_NINFER_SRC")
+    if source:
+        candidates.append(Path(source) / "bench/fixtures/bench_corpus.ids")
+    candidates.append(Path(__file__).resolve().parents[2] / "runtime/source/bench/fixtures/bench_corpus.ids")
+    return tuple(candidates)
+
+
+DEFAULT_CORPUS_CANDIDATES = _default_corpora()
 
 
 class BenchmarkEngine:

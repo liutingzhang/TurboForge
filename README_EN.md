@@ -17,11 +17,16 @@ A chat app opens a model someone else already prepared. TurboForge turns your ow
 
 ## Install and open
 
-1. Download the Windows bundle from Releases and extract it to a folder with free space, for example `D:\TurboForge`. Do not run it from inside the ZIP.
-2. Double-click **`启动 TurboForge.bat`** and wait for the browser. Leave the window open; closing it stops the service.
-3. If the page does not open, use the address printed in that window. The default is `http://127.0.0.1:8090`. If 8090 is taken, another port is chosen.
+The release is split into two ZIP files; both are required:
 
-The first run needs the internet and an NVIDIA driver that is already installed. You do not need Git, Node.js, Python, or the CUDA Toolkit beforehand. The bundle is about 3.2 GB and includes source, the web page, Python 3.13.18, and a matched NInfer engine. It does not include models or personal keys.
+1. Download `TurboForge-Windows-x64-part1.zip` and `TurboForge-Windows-x64-part2.zip` into the same folder. GitHub's 2 GB per-file limit is why the release is split.
+2. Extract both into the same parent folder, for example `D:\`; choose Merge when Windows asks. You should end up with `D:\TurboForge`.
+3. Open `TurboForge` and double-click **`启动 TurboForge.bat`**. Leave the window open; closing it stops the service.
+4. If the page does not open, use the address printed in that window. The default is `http://127.0.0.1:8090`. If 8090 is taken, another port is chosen.
+
+Uninstall: delete the whole `TurboForge` folder. If you used the HF route, also delete `%LOCALAPPDATA%\NInferTurboForge`, which holds downloaded Python/HF environments. Models and build records live inside `TurboForge`, so deleting the folder is a full cleanup.
+
+The first run needs the internet and an NVIDIA driver that is already installed. You do not need Git, Node.js, Python, or the CUDA Toolkit beforehand. The two parts total about 3.5 GB and include source, the web page, Python 3.13.18, and a matched NInfer engine. They do not include models or personal keys. Checksums are in `SHA256SUMS.txt`; both parts are required.
 
 Check the machine without converting:
 
@@ -31,7 +36,7 @@ Check the machine without converting:
 
 The report is `.turboforge/deployment.json`. Logs are in `.turboforge/logs/`.
 
-To run from source, create a virtual environment and point at the engine from the bundle, or set `TURBOFORGE_NINFER_BIN`:
+To run from source, create a virtual environment. Conversion also needs a matched NInfer source and engine: point `TURBOFORGE_NINFER_SRC` at the directory containing `tools/convert`, and `TURBOFORGE_NINFER_BIN` at the engine directory. The bundle needs neither.
 
 ```powershell
 python -m venv .venv

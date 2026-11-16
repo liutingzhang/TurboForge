@@ -17,11 +17,16 @@
 
 ## 安装并打开
 
-1. 从 Releases 下载 Windows 整合包，完整解压到空间够的目录，例如 `D:\TurboForge`。不要在压缩包里直接运行。
-2. 双击 **`启动 TurboForge.bat`**，等浏览器打开。窗口不要关，关掉就会停服务。
-3. 网页打不开时，看窗口里打印的地址。默认是 `http://127.0.0.1:8090`，这个端口被占用会自动换一个。
+发布包拆成两个 zip，两个都必须下载：
 
-首次需要联网，也需要已经装好的 NVIDIA 驱动。不用预先安装 Git、Node.js、Python 或 CUDA Toolkit。整合包约 3.2 GB，带源码、网页、Python 3.13.18 和匹配的 NInfer 引擎，不含模型和个人密钥。
+1. 下载 `TurboForge-Windows-x64-part1.zip` 和 `TurboForge-Windows-x64-part2.zip`，放在同一个文件夹。GitHub 单文件限制 2 GB，所以拆成两包。
+2. 在同一个父目录分别解压两个包，例如都解压到 `D:\`；提示合并时选择合并，最后得到 `D:\TurboForge`。
+3. 打开 `TurboForge`，双击 **`启动 TurboForge.bat`**，等浏览器打开。窗口不要关，关掉就会停服务。
+4. 网页打不开时，看窗口里打印的地址。默认是 `http://127.0.0.1:8090`，这个端口被占用会自动换一个。
+
+卸载：删除整个 `TurboForge` 文件夹。用过 HF 路线时，再删除 `%LOCALAPPDATA%\NInferTurboForge`，那里是下载的 Python/HF 环境。模型和构建记录都在 `TurboForge` 目录内，删目录即可清理。
+
+首次需要联网，也需要已经装好的 NVIDIA 驱动。不用预先安装 Git、Node.js、Python 或 CUDA Toolkit。两个包合计约 3.5 GB，带源码、网页、Python 3.13.18 和匹配的 NInfer 引擎，不含模型和个人密钥。校验值在 `SHA256SUMS.txt`，缺任何一个包都无法启动。
 
 只想检查环境、不做转换：
 
@@ -31,7 +36,7 @@
 
 结果在 `.turboforge/deployment.json`，日志在 `.turboforge/logs/`。
 
-从源码启动时，先准备 Python 环境，再用整合包里的引擎，或设置 `TURBOFORGE_NINFER_BIN` 指向引擎目录：
+从源码启动时，先准备 Python 环境。转换还需要匹配的 NInfer 源码和引擎：用 `TURBOFORGE_NINFER_SRC` 指向包含 `tools/convert` 的目录，用 `TURBOFORGE_NINFER_BIN` 指向引擎目录；用整合包时无需设置。
 
 ```powershell
 python -m venv .venv

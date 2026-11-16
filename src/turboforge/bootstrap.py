@@ -228,7 +228,10 @@ def local_tools() -> tuple[Path, Path] | None:
             if result.returncode or not result.stdout.strip() or float(result.stdout.splitlines()[0]) not in data["gpu_capabilities"]:
                 return None  # The official package will be selected for this GPU.
         return bundled / "source", bundled / "bin"
-    source = Path(os.environ.get("TURBOFORGE_NINFER_SRC", r"D:\llm\ninfer-upstream"))
+    source_value = os.environ.get("TURBOFORGE_NINFER_SRC")
+    if not source_value:
+        return None
+    source = Path(source_value)
     if not (source / "tools/convert/__main__.py").is_file():
         return None
     revision = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], capture_output=True, text=True, env=child_environment()).stdout.strip() if shutil.which("git") else ""

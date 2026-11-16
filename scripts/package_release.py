@@ -41,16 +41,15 @@ def package(output: Path, *, replace: bool = False) -> Path:
     files = {}
     python_archive = prepare_python_runtime()
     files["runtime/python/"+python_archive.name] = python_archive
-    # Runtime needs the app, the built page, and the three knowledge sources the
-    # assistant compiler checks. Tests, developer docs, and CI stay out.
-    for directory in ("src", "scripts", "web/dist", "configs"):
+    # Runtime needs the app, the built page, its frontend sources, and the two
+    # launcher scripts. Tests, docs, configs, CI and release tooling stay out.
+    launcher_scripts = {"start_web.py", "start_web.ps1", "frontend_receipt.py"}
+    for directory in ("src", "scripts", "web/dist", "web/src", "web/public"):
         for path in (ROOT / directory).rglob("*"):
+            if directory == "scripts" and path.name not in launcher_scripts:
+                continue
             if path.is_file() and not private_path(path.relative_to(ROOT).as_posix()):
                 files[path.relative_to(ROOT).as_posix()] = path
-    for name in ("docs/AI_ASSISTANT_KNOWLEDGE.md", "docs/AI_ASSISTANT_DIAGNOSTICS.md", "docs/AI_ASSISTANT_FIELDS.md"):
-        path = ROOT / name
-        if path.is_file():
-            files[name] = path
     for name in ("启动 TurboForge.bat", "README.md", "README_EN.md", "pyproject.toml", "LICENSE", "NOTICE", ".env.example", "requirements-web.txt", "web/package.json", "web/package-lock.json", "web/index.html", "web/vite.config.ts", "web/tsconfig.json"):
         path = ROOT / name
         if path.is_file():
@@ -77,9 +76,14 @@ def package(output: Path, *, replace: bool = False) -> Path:
         added = subprocess.run(["git", "-C", str(source), "ls-files", "--others", "--exclude-standard", "-z"], capture_output=True, check=True, env=child_environment()).stdout.decode().split("\0")
         paths += [source / name for name in added if name and Path(name).suffix.lower() in (".cu", ".cuh", ".c", ".cpp", ".h", ".hpp", ".cmake", ".py")]
     paths += list((source / "tools").rglob("*.py"))  # include the tested local converter port
+    blocked_parts = {"tests", "test", "docs", "examples", "example", "__pycache__"}
     for path in paths:
         relative = path.relative_to(source)
         name = relative.as_posix()
+        if any(part.lower() in blocked_parts for part in relative.parts):
+            continue
+        if relative.suffix.lower() in {".md", ".rst"}:
+            continue
         if path.is_file() and not private_path(name) and relative.name not in {"CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md"}:
             files["runtime/source/" + name] = path
     if "runtime/source/tools/convert/__main__.py" not in files:
