@@ -1,4 +1,4 @@
-"""Local web GUI for NInfer TurboForge.
+"""Local web GUI for TurboForge.
 
 A clean JSON API (Flask blueprint) plus a built single-page frontend (web/dist).
 The API is the single source of truth for every choice the UI offers: dropdowns,

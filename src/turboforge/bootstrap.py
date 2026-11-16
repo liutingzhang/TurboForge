@@ -49,7 +49,7 @@ def digest(path: Path) -> str:
 
 
 def read_url(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "NInfer-TurboForge/0.3"})
+    request = urllib.request.Request(url, headers={"User-Agent": "TurboForge/0.3"})
     with urllib.request.urlopen(request, timeout=45) as response:
         return response.read()
 
@@ -65,7 +65,7 @@ def download(url: str, destination: Path, *, sha256: str | None = None,
         return destination
     partial = destination.with_name(destination.name + ".part")
     offset = partial.stat().st_size if partial.exists() else 0
-    headers = {"User-Agent": "NInfer-TurboForge/0.3"}
+    headers = {"User-Agent": "TurboForge/0.3"}
     if offset:
         headers["Range"] = f"bytes={offset}-"
     request = urllib.request.Request(url, headers=headers)

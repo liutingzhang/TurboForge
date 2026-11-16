@@ -46,7 +46,7 @@ code{display:block;background:#0b0f13;border:1px solid #223041;border-radius:8px
   font-size:13px;color:#7ee787;white-space:pre}
 a{color:#38bdf8}
 </style></head><body><div class="card">
-<h1><span class="spark">&#9670;</span> NInfer TurboForge</h1>
+<h1><span class="spark">&#9670;</span> TurboForge</h1>
 <p>前端尚未构建。API 已就绪，构建界面后即可使用完整 GUI：</p>
 <code>cd web
 npm install

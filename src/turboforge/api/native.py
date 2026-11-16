@@ -14,7 +14,7 @@ from tkinter import filedialog
 root = tk.Tk()
 root.withdraw()
 root.attributes('-topmost', True)
-options = {'parent': root, 'title': 'NInfer TurboForge — 选择本机路径'}
+options = {'parent': root, 'title': 'TurboForge — 选择本机路径'}
 try:
     path = filedialog.askdirectory(**options) if sys.argv[1] == 'directory' else filedialog.askopenfilename(**options)
     print(json.dumps({'path': path or None}))

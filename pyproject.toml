@@ -3,12 +3,12 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ninfer-turboforge"
+name = "turboforge"
 version = "0.3.0"
 description = "Inspect, quantize and validate local models, then route Dense to NInfer and MoE to Basalt or Strata"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
-authors = [{name = "NInfer TurboForge contributors"}]
+authors = [{name = "TurboForge contributors"}]
 # The core package (inspector, planner, compiler driver, manifest, benchmark,
 # reports, CLI) is pure standard library: safetensors headers are read with
 # struct, so inspecting and planning a model needs no third-party install.

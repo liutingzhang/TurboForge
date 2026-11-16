@@ -111,7 +111,7 @@ def _render_plan(plan) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="turboforge",
-        description="NInfer TurboForge: compatibility-checked model builds for NInfer",
+        description="TurboForge: inspect, quantize and validate local models for NInfer, Basalt or Strata",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
