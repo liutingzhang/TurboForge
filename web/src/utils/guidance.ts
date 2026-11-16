@@ -1,0 +1,25 @@
+import type { Diagnostic } from '../api/types';
+const messages: Record<string, string> = {
+  'gguf-secondary-source': '请先选择与该 GGUF 对应的原始模型目录，用于补齐配置和分词器；也可返回引导模式自动检查来源。',
+  'abliteration-needs-safetensors': '这个量化文件不支持越狱，请选择不处理，或改用原始模型文件夹。',
+  'input-unreadable': '无法读取模型，请检查路径和文件完整性。',
+  'no-verified-recipe': '此模型暂无可用转换方案，请更换受支持的模型。',
+  'target-incompatible': '量化与模型不兼容，请回到第二步选择「自动推荐」。',
+  'recipe-source-missing': '此方案需要额外权重，请在第二步补全必填来源。',
+  'source-missing': '附加来源不存在，请重新选择文件或目录。',
+  'upstream-missing': '找不到转换器，请在第一步选择 NInfer 源码目录。',
+  'torch-missing': '缺少 torch，请使用项目的一键启动脚本安装转换依赖。',
+  'numpy-missing': '缺少 numpy，请使用项目的一键启动脚本修复环境。',
+  'ram-profile-unverified': '此转换路线的内存峰值尚未验证，首次运行请留意系统内存。',
+  'ram-insufficient': '系统内存不足，请关闭其他程序，或使用较小模型／已有方向向量。',
+  'disk-insufficient': '输出盘空间不足，请更换输出目录。',
+  'vram-insufficient': '预计显存不足以完整驻留，请减少上下文、并发或量化位宽；速度可能受影响。',
+  'gpu-not-detected': '未检测到 NVIDIA 显存，请确认显卡与驱动。转换与 GPU 推理是不同阶段。',
+  'context-capped-gdn-geometry': '此小模型引擎的上下文上限是 1024 token，将按上限启动；长文档需更换已支持的模型。',
+  'jailbreak-not-applied-to-imported-weights': '量化权重导入不能叠加越狱。请选择「不越狱」，或改用原始高精度模型。',
+  'heretic-unavailable': 'Heretic 未安装，请先选其他方式，或安装 heretic-llm 后重启。',
+  'device-unverified-cpu': '使用 CPU 转换，耗时尚未经此模型实测；生成模型仍由 NVIDIA GPU 推理。',
+  'tokenizer-missing': '缺少分词器，请选择完整 HF 模型目录。',
+  'upstream-revision-differs': '转换器版本与已核对版本不同，请留意兼容性。',
+};
+export const diagnosticText = (d: Diagnostic): string => messages[d.code] ?? d.message;

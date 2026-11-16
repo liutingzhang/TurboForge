@@ -1,0 +1,9 @@
+{
+  "_comment": "Original BF16/FP16 safetensors, no jailbreak. target=auto picks Bonsai 2 when a published ternary GGUF is supplied, otherwise the lowest-bpw verified recipe for the inspected architecture; the pinned converter has no BF16->NVFP4 quantizer, so NVFP4 output is only reachable by importing an existing NVFP4 checkpoint (see 03). MTP/DFlash2 components are carried through automatically when detected.",
+  "input_path": "D:/models/Qwen3.8-27B",
+  "output_dir": "D:/turboforge/builds/qwen38-27b-groupwise",
+  "target": "auto",
+  "jailbreak": "none",
+  "device": "cuda",
+  "runtime": {"max_context": 32768}
+}

@@ -1,0 +1,42 @@
+NInfer TurboForge
+Copyright NInfer TurboForge contributors.
+Project code is distributed under the Apache License, Version 2.0.
+
+Third-party components retain their own licenses. The project license does not
+relicense model weights or proprietary runtime libraries.
+
+NInfer / ninfer-all:
+  https://github.com/iamwavecut/ninfer-all
+  Apache-2.0; the bundled runtime/source/LICENSE is retained.
+  The runtime contains local compatibility changes; runtime/bundle.json and
+  runtime/source/.turboforge-source.json record the source revision and inclusion
+  of local modifications. The corresponding source tree is included.
+
+NVIDIA CUDA runtime / cuBLAS:
+  Copyright NVIDIA Corporation. Distributed components are subject to the CUDA
+  Toolkit EULA, including redistribution conditions; they are not Apache-2.0.
+  See runtime/licenses/ and https://docs.nvidia.com/cuda/eula/index.html
+  The GPU driver is supplied separately by NVIDIA and is not bundled.
+
+Microsoft Visual C++ runtime:
+  Copyright Microsoft Corporation. Runtime files retain Microsoft's terms.
+  https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
+  https://visualstudio.microsoft.com/license-terms/
+
+PyPcre, PCRE2 and SLJIT:
+  Bundled Windows wheels, hashes, build provenance and license texts are under
+  src/turboforge/data/hf-wheels/. These are not relicensed by TurboForge.
+
+React, Ant Design and other frontend packages:
+  Their license/notice files are included under licenses/web/ in the Windows
+  release, with exact resolved versions in web/package-lock.json.
+
+Astral python-build-standalone / CPython:
+  The pinned standard-GIL CPython 3.13.18 runtime archive is included in the
+  Windows release under runtime/python/. Original license notices remain inside
+  that archive and in the extracted interpreter. Build URL and SHA-256 are in
+  src/turboforge/data/python-runtime.json.
+  https://github.com/astral-sh/python-build-standalone/releases/tag/20261110
+
+Optional Python packages are downloaded during setup and retain their
+publisher licenses. Models and datasets must be used under their own terms.

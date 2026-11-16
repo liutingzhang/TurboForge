@@ -1,0 +1,10 @@
+{
+  "_comment": "GGUF block import. A GGUF is never a standalone input for the pinned converter: the Hugging Face directory remains --model (for this route only its config/tokenizer files are needed) and the GGUF is the gguf source. Weight precision comes from the GGUF blocks themselves and is imported verbatim. Requires the Qwen3.8-27B Dense geometry.",
+  "input_path": "D:/models/Qwen3.8-27B",
+  "output_dir": "D:/turboforge/builds/qwen38-27b-gguf",
+  "target": "qwen3_8_27b_gguf",
+  "jailbreak": "none",
+  "device": "cuda",
+  "sources": {"gguf": "D:/models/Qwen3.8-27B-Q4.gguf"},
+  "runtime": {"max_context": 32768}
+}

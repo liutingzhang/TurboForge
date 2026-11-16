@@ -1,0 +1,10 @@
+{
+  "version": "3.13.18",
+  "build": "20261110",
+  "folder": "Python31318",
+  "filename": "python-3.13.18-win64.tar.gz",
+  "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.13.18%2B20261110-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+  "sha256": "2e0fed09d48989f64c9305da9ff2d37a41c0d13ab2aa6283405b2b620dfbf805",
+  "size": 22367730,
+  "source": "https://github.com/astral-sh/python-build-standalone/releases/tag/20261110"
+}

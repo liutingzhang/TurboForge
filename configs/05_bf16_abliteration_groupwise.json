@@ -1,0 +1,10 @@
+{
+  "_comment": "Original BF16/FP16 safetensors -> abliteration (refusal-direction orthogonalization, Arditi et al.) -> target=auto verified quantizer. Abliteration edits high-precision weights shard-by-shard on CPU (torch), then the result is quantized; the source directory is never touched. Supply the refusal direction via jailbreak_params.direction_file (a .npy/.pt vector of length hidden_size, e.g. exported from heretic); omit it and install transformers to collect it from harmful/harmless calibration instead. NVFP4/GGUF inputs are refused. Behavioral change is not verified by the edit; measure refusal before/after with the quality report.",
+  "input_path": "D:/models/Qwen3.8-27B",
+  "output_dir": "D:/turboforge/builds/qwen38-27b-abliteration",
+  "target": "auto",
+  "jailbreak": "abliteration",
+  "jailbreak_params": {"direction_file": "D:/models/refusal_directions/qwen38-27b.npy"},
+  "device": "cuda",
+  "runtime": {"max_context": 32768}
+}

@@ -1,0 +1,67 @@
+# Python / build outputs
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.log
+
+# Generated build artifacts and model weights (never commit)
+builds/
+reports/
+logs/
+profiles/
+.screenshots/
+.turboforge/
+runtime/
+*.ninfer
+*.basalt
+*.gguf
+*.safetensors
+*.part
+*.exe
+*.dll
+*.zip
+*.7z
+
+# Web frontend dependencies and build output
+node_modules/
+web/dist/
+web/.vite/
+*.local
+
+# Secrets and machine-local configuration
+.env
+.env.*
+!.env.example
+.assistant-config-*
+*.key
+*.pem
+*.pfx
+secrets.*
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Documentation and delivery notes stay out of the source repo.
+# The three AI_ASSISTANT_*.md files are build inputs for
+# scripts/build_assistant_knowledge.py, which CI runs with --check, so they
+# must remain tracked; every other file under docs/ is excluded.
+docs/*
+!docs/AI_ASSISTANT_KNOWLEDGE.md
+!docs/AI_ASSISTANT_DIAGNOSTICS.md
+!docs/AI_ASSISTANT_FIELDS.md
+/PROJECT_SUMMARY.md
+/CHANGELOG.md
+/CONTRIBUTING.md
+/SECURITY.md
+/web/README.md

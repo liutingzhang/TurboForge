@@ -1,0 +1,10 @@
+{
+  "_comment": "Bonsai 2 Ternary (PQ2_0) import, the preferred default when a published ternary GGUF is supplied (target=auto would pick it too). The ternary GGUF must exist already (published weights; TurboForge never trains it). The safetensors directory stays --model for config/tokenizer. If the PQ2_0 GGUF was produced from already-jailbroken weights, TurboForge imports it verbatim and records that prior processing is unverified.",
+  "input_path": "D:/models/Qwen3.8-27B",
+  "output_dir": "D:/turboforge/builds/qwen38-27b-bonsai2",
+  "target": "bonsai2_27b_ternary",
+  "jailbreak": "none",
+  "device": "cuda",
+  "sources": {"ternary": "D:/models/Ternary-Bonsai-2-27B-PQ2_0.gguf"},
+  "runtime": {"max_context": 32768}
+}

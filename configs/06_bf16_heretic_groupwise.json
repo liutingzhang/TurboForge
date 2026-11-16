@@ -1,0 +1,9 @@
+{
+  "_comment": "Original BF16/FP16 safetensors -> Heretic one-click jailbreak -> target=auto verified quantizer. Requires pip install -U heretic-llm (torch + transformers). Heretic runs in its own console window; when it finishes, choose Save the model to a local folder and paste <output_dir>/intermediate/heretic. TurboForge waits for the saved weights and then continues quantization automatically; if heretic exits without saving, the build fails honestly. NVFP4/GGUF inputs are refused. The source directory is never touched.",
+  "input_path": "D:/models/Qwen3.8-27B",
+  "output_dir": "D:/turboforge/builds/qwen38-27b-heretic",
+  "target": "auto",
+  "jailbreak": "heretic",
+  "device": "cuda",
+  "runtime": {"max_context": 32768}
+}

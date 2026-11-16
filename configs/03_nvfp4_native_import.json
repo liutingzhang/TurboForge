@@ -1,0 +1,10 @@
+{
+  "_comment": "NVFP4 checkpoint imported verbatim (import_encoded, no re-quantization of packed codes). input_path is still the original BF16 safetensors directory: the recipes read the BF16 embedding and other non-packed tensors from --model; the NVFP4 weights are the quantized source. Pick the nvfp4 recipe variant that matches your checkpoint's layout: qwen3_8_27b_nvfp4 (compressed-tensors), _nvidia (ModelOpt AutoQuant) or _orcarouter (GPTQ). NVFP4 output is 4.25 bpw and cannot be re-quantized to other widths on this route; jailbreak on NVFP4 input is refused.",
+  "input_path": "D:/models/Qwen3.8-27B",
+  "output_dir": "D:/turboforge/builds/qwen38-27b-nvfp4",
+  "target": "qwen3_8_27b_nvfp4_nvidia",
+  "jailbreak": "none",
+  "device": "cuda",
+  "sources": {"quantized": "D:/models/Qwen3.8-27B-NVFP4"},
+  "runtime": {"max_context": 32768}
+}

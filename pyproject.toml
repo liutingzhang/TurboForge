@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ninfer-turboforge"
+version = "0.3.0"
+description = "Inspect, quantize and validate local models, then route Dense to NInfer and MoE to Basalt or Strata"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "NInfer TurboForge contributors"}]
+# The core package (inspector, planner, compiler driver, manifest, benchmark,
+# reports, CLI) is pure standard library: safetensors headers are read with
+# struct, so inspecting and planning a model needs no third-party install.
+# Heavy libraries are optional and declared per feature below. The upstream
+# `tools.convert` subprocess needs torch+numpy+safetensors in its own
+# environment regardless (see docs/INSTALL.md).
+dependencies = []
+
+[project.optional-dependencies]
+# abliteration / lora_merge weight editing (shard-streamed torch math)
+weights = ["torch>=2.1", "safetensors>=0.4.5", "numpy>=1.26", "gguf>=0.19,<1"]
+# abliteration refusal-direction calibration from activations (also needs weights)
+calibration = ["transformers>=5.9,<6"]
+# local Flask configuration UI
+webui = ["flask>=3.0"]
+test = ["pytest>=8"]
+
+[project.scripts]
+turboforge = "turboforge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+turboforge = ["data/*.ps1", "data/*.json", "data/hf-wheels/*"]
+
+"turboforge.assistant" = ["knowledge/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"

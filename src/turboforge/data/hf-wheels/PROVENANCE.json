@@ -1,0 +1,12 @@
+{
+  "built_on": "2026-11-14",
+  "purpose": "Compiler-free PyPcre installation for the Windows HF environment",
+  "pypcre": {"version": "0.6.4", "source": "https://pypi.org/project/PyPcre/0.6.4/", "modified": false},
+  "pcre2": {"tag": "pcre2-10.46", "commit": "b2bd4254b379b9d7dc9a3dda060a7e27009ccdff", "source": "https://github.com/PCRE2Project/pcre2", "modified": false},
+  "wheels": {
+    "pypcre-0.6.4-cp310-cp310-win_amd64.whl": "39995fce275dd809763dca4f95edb57d56b0be3968c671952ac1b270135f186f",
+    "pypcre-0.6.4-cp313-cp313-win_amd64.whl": "cc6cc732891e65963d4ee5f37e4e82d4f31daed74b8326fb9e0e3922164f27fc"
+  },
+  "validation": "CPython 3.10 GPTQModel import and CPython 3.13 isolated PyPcre import/regex; hashes checked before installation",
+  "licenses": ["PyPcre-LICENSE.txt", "PCRE2-LICENSE.txt", "SLJIT-LICENSE.txt"]
+}
