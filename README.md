@@ -2,7 +2,7 @@
 
 When a new model comes out, running it on your own GPU — fast enough, with a long context — takes two steps: turn the weights into something this machine can run, then hand that file to the right inference engine. TurboForge does the first half. Dense artifacts go to NInfer; MoE goes to Basalt or Strata depending on the GPU.
 
-[Chinese README (main branch)](https://github.com/liutingzhang/NInfer-TurboForge/blob/main/README.md) · [Apache-2.0](LICENSE) · [Third-party notices](NOTICE) · [Configuration template](.env.example)
+[Chinese README (main branch)](https://github.com/liutingzhang/TurboForge/blob/main/README.md) · [Apache-2.0](LICENSE) · [Third-party notices](NOTICE) · [Configuration template](.env.example)
 
 > This branch is the **English edition**: the web UI, built-in help, and assistant are English-only. The Chinese edition lives on `main`.
 
