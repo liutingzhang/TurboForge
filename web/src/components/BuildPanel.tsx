@@ -20,7 +20,7 @@ interface Props {
   onServerActive?: (active:boolean) => void;
 }
 
-const STAGES = ['计划', '越狱', '转换', '验证', '基准', '完成'];
+const STAGES = ['Plan', 'Abliteration', 'Convert', 'Validate', 'Benchmark', 'Done'];
 const STAGE_INDEX: Record<string, number> = {
   created: 0,
   planned: 0,
@@ -35,11 +35,11 @@ const STAGE_INDEX: Record<string, number> = {
 };
 const ERROR_STATUSES = new Set(['blocked', 'failed', 'crashed', 'validation-failed', 'quality-rejected', 'interrupted']);
 const OK_FINAL = new Set(['validated', 'converted']);
-const STATUS_LABEL: Record<string, string> = {idle:'等待开始', starting:'正在开始', planned:'已规划',
-  interrupted:'上次任务被中断，请重新开始', preparing:'自动准备依赖与模型文件', 'quality-rejected':'质量门禁未通过，禁止直接启动',
-  jailbreaking:'正在标定与越狱', jailbroken:'权重编辑完成', converting:'正在转换', converted:'转换完成（未验证）',
-  validating:'正在验证 GPU 加载与生成', validated:'验证通过', benchmarking:'正在测试速度',
-  blocked:'配置被阻止', failed:'构建失败', crashed:'构建异常', 'validation-failed':'GPU 验证失败'};
+const STATUS_LABEL: Record<string, string> = {idle:'Waiting to start', starting:'Starting', planned:'Planned',
+  interrupted:'The previous task was interrupted; start again', preparing:'Automatically preparing dependencies and model files', 'quality-rejected':'Quality gate failed; direct start is forbidden',
+  jailbreaking:'Calibrating and abliterating', jailbroken:'Weight editing complete', converting:'Converting', converted:'Conversion complete (not validated)',
+  validating:'Validating GPU load and generation', validated:'Validation passed', benchmarking:'Benchmarking speed',
+  blocked:'Config blocked', failed:'Build failed', crashed:'Build error', 'validation-failed':'GPU validation failed'};
 
 function stageState(status: string, finished: boolean, history: { status: string }[]) {
   let reached = 0;
@@ -56,10 +56,10 @@ function stageState(status: string, finished: boolean, history: { status: string
 }
 
 const HEADLINE: Record<string, string> = {
-  measured: '实测',
-  configured: '配置',
-  refused: '拒绝',
-  not_measured: '未实测',
+  measured: 'Measured',
+  configured: 'Configured',
+  refused: 'Refused',
+  not_measured: 'Not measured',
 };
 
 function metricNode(entry?: MetricEntry | null) {
@@ -136,7 +136,7 @@ export default function BuildPanel({
 
   return (
     <Panel
-      title="一键转换"
+      title="One-click conversion"
       icon={<RocketOutlined />}
       extra={
         <Button
@@ -146,11 +146,11 @@ export default function BuildPanel({
           loading={building}
           onClick={onStart}
         >
-          {building ? '转换中…' : '开始转换'}
+          {building ? 'Converting…' : 'Start conversion'}
         </Button>
       }
     >
-      <div className="status-line" data-ai-id="build.status" data-ai-title="构建状态" style={{ marginBottom: 14 }}>
+      <div className="status-line" data-ai-id="build.status" data-ai-title="Build status" style={{ marginBottom: 14 }}>
         <span className={'status-dot ' + dotClass} />
         <span>{STATUS_LABEL[status] ?? status}</span>
         {building && <span className="muted">· {elapsedLabel(startMs, now)}</span>}
@@ -158,13 +158,13 @@ export default function BuildPanel({
 
       {!buildStatus && (
         <p className="muted" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6 }}>
-          计划可执行后，点击「开始转换」。整个过程（越狱 → 量化转换 → 验证 → 实测）会实时显示在下方；
-          原始模型不会被修改，产物写入输出目录。
+          Once the plan is executable, click 'Start conversion'. The whole process (abliteration → quantization/conversion → validation → measurement) is shown live below; 
+          the original model is never modified; artifacts are written to the output directory.
         </p>
       )}
-      {buildStatus?.status === 'preparing' && <Notice title="脚本正在自动准备，请保持本机服务运行">
-        <p>首次可能下载数 GiB 的引擎或模型文件。已校验的缓存会复用；网络中断后可再次开始，下载将续传。</p>
-        <div className="console" style={{maxHeight:220}}>{buildStatus.setup_log?.slice(-8).join('\n') || '正在检查依赖…'}</div>
+      {buildStatus?.status === 'preparing' && <Notice title="The script is preparing automatically; keep the local service running">
+        <p>The first run may download several GiB of engine or model files. Verified caches are reused; after a network interruption, start again and downloads resume.</p>
+        <div className="console" style={{maxHeight:220}}>{buildStatus.setup_log?.slice(-8).join('\n') || 'Checking dependencies…'}</div>
       </Notice>}
 
       {buildStatus && (
@@ -175,37 +175,37 @@ export default function BuildPanel({
             items={visibleStages.map(({title, index}) => ({ title, status: stages[index] }))}
           />
 
-          {quality?.gate && <div data-ai-id="quality.gate" data-ai-title="质量门禁"><Notice tone={quality.gate.status === 'passed' ? 'ok' : 'bad'} title={quality.gate.status === 'passed' ? '质量门禁通过（限所测语料）' : '质量门禁未通过'}>{quality.gate.relative_increase !== undefined ? `PPL 相对增幅 ${(quality.gate.relative_increase*100).toFixed(2)}%` : quality.gate.note}</Notice></div>}
-          {buildStatus.finished && OK_FINAL.has(status) && <Notice title="本次验收范围">可运行：{status === 'validated' ? 'GPU 验证通过' : '未验证'}；质量：{quality?.gate?.status === 'passed' ? '所测语料门禁通过' : quality?.gate ? '门禁未通过' : '未通过门禁验证'}；加速结论：{performance?.metrics?.decode_tok_s?.status === 'measured' ? '已测速；是否更快仍需同条件对照' : '未实测'}。</Notice>}
-          {!!retainedHeads.length && <Notice tone="ok" title="推测头保留校验通过">已保留 {retainedHeads.join('、')} 的实际权重绑定并接通输出投影。{manifest?.plan?.serving?.spec ? `当前启用 ${manifest.plan.serving.spec.toUpperCase()}。` : '当前未启用推测解码。'}组件接通不等于实测提速，速度以对应配置的已有/实际测量为准。</Notice>}
-          {manifest?.speculative_retention?.status === 'retained' && <Notice title="推测头已无损归档">自带头与组件文件已按原始字节保留；当前 HF 服务不执行 MTP/DFlash2，不能把文件保留标成已经加速。</Notice>}
-          {buildStatus.error && <Notice tone="bad" title="构建异常">{buildStatus.error}</Notice>}
+          {quality?.gate && <div data-ai-id="quality.gate" data-ai-title="Quality gate"><Notice tone={quality.gate.status === 'passed' ? 'ok' : 'bad'} title={quality.gate.status === 'passed' ? 'Quality gate passed (tested corpus only)' : 'Quality gate failed'}>{quality.gate.relative_increase !== undefined ? `Relative PPL increase ${(quality.gate.relative_increase*100).toFixed(2)}%` : quality.gate.note}</Notice></div>}
+          {buildStatus.finished && OK_FINAL.has(status) && <Notice title="Acceptance scope of this run">Runnable: {status === 'validated' ? 'GPU validation passed' : 'not validated'}; quality: {quality?.gate?.status === 'passed' ? 'gate passed on the tested corpus' : quality?.gate ? 'gate failed' : 'not gate-validated'}; acceleration: {performance?.metrics?.decode_tok_s?.status === 'measured' ? 'speed measured; whether it is faster still needs a same-condition baseline' : 'not measured'}.</Notice>}
+          {!!retainedHeads.length && <Notice tone="ok" title="Speculative-head retention check passed">Retained the actual weight bindings of {retainedHeads.join(', ')} and connected them to the output projection. {manifest?.plan?.serving?.spec ? `Currently enabled: ${manifest.plan.serving.spec.toUpperCase()}.` : 'Speculative decoding is currently disabled.'}Connected components do not equal measured speedup; speed follows existing/actual measurements for the corresponding config.</Notice>}
+          {manifest?.speculative_retention?.status === 'retained' && <Notice title="Speculative heads archived losslessly">Bundled heads and component files are kept byte-for-byte; the current HF service does not run MTP/DFlash2, so file retention must not be labeled as acceleration.</Notice>}
+          {buildStatus.error && <Notice tone="bad" title="Build error">{buildStatus.error}</Notice>}
           {isError && !buildStatus.error && (
-            <Notice tone="bad" title={`构建${status === 'blocked' ? '被阻止' : '失败'}：${status}`}>
+            <Notice tone="bad" title={`Build ${status === 'blocked' ? 'blocked' : 'failed'}: ${status}`}>
               {manifest?.plan_diagnostics?.length
-                ? manifest.plan_diagnostics.map((d) => d.message).join('；')
-                : [...history].reverse().find((h) => ERROR_STATUSES.has(h.status) && h.detail !== 'performance/quality reports written')?.detail ?? '见下方时间线与日志'}
+                ? manifest.plan_diagnostics.map((d) => d.message).join('; ')
+                : [...history].reverse().find((h) => ERROR_STATUSES.has(h.status) && h.detail !== 'performance/quality reports written')?.detail ?? 'See the timeline and logs below'}
             </Notice>
           )}
           {buildStatus.finished && OK_FINAL.has(status) && (
-            <Notice tone="ok" title="构建完成">
-              产物已保存到 {buildStatus.output_dir}。如需重新构建，请回到第一步；自动模式会分配新目录，高级模式需选择空目录。
+            <Notice tone="ok" title="Build complete">
+              Artifacts saved to {buildStatus.output_dir}. To rebuild, go back to step 1; auto mode assigns a new directory, advanced mode needs an empty directory.
             </Notice>
           )}
-          {buildStatus.finished && status === 'validated' && <Notice tone="info" title="下一步：启动并使用模型">
-            <p>点击启动后等待模型加载。状态显示就绪，即可把下面的地址填入支持 OpenAI API 的应用。服务运行期间会占用显存。</p>
-            <Space data-ai-id="build.server" data-ai-title="启动与停止模型服务">
-              <Button type="primary" loading={serverBusy} disabled={serverActive} onClick={() => controlServer('POST')}>启动模型服务</Button>
-              <Button disabled={!serverActive || serverBusy} onClick={() => controlServer('DELETE')}>停止并释放显存</Button>
-              <span>{server?.status === 'ready' ? '服务已就绪' : server?.status === 'starting' ? '正在加载模型…' : server?.status === 'exited' ? '服务已退出，请查看 serve.log' : '尚未启动'}</span>
+          {buildStatus.finished && status === 'validated' && <Notice tone="info" title="Next: start and use the model">
+            <p>After clicking start, wait for the model to load. Once the status shows ready, put the address below into any OpenAI-API-compatible app. The service occupies VRAM while running.</p>
+            <Space data-ai-id="build.server" data-ai-title="Start and stop the model service">
+              <Button type="primary" loading={serverBusy} disabled={serverActive} onClick={() => controlServer('POST')}>Start model API</Button>
+              <Button disabled={!serverActive || serverBusy} onClick={() => controlServer('DELETE')}>Stop and free VRAM</Button>
+              <span>{server?.status === 'ready' ? 'Service ready' : server?.status === 'starting' ? 'Loading model…' : server?.status === 'exited' ? 'Service exited; check serve.log' : 'Not started'}</span>
             </Space>
             {server && <Typography.Paragraph copyable={{text:server.base_url}} className="mono" style={{marginTop:12}}>{server.base_url}</Typography.Paragraph>}
-            <p>也可双击输出目录中的 scripts/run.bat 启动；详细日志位于 logs/serve.log。</p>
+            <p>You can also double-click scripts/run.bat in the output directory to start; detailed logs are in logs/serve.log.</p>
           </Notice>}
-          {buildStatus.finished && status === 'converted' && <Notice tone="warn" title="转换完成，尚未验证可运行">此次关闭了 GPU 验证，页面不会标为可直接使用。可用 scripts/run.bat 手动验证，或回到第一步选择新输出目录并开启验证。</Notice>}
+          {buildStatus.finished && status === 'converted' && <Notice tone="warn" title="Conversion complete; runnability not yet validated">GPU validation was turned off for this run, so the page will not mark it directly usable. Validate manually with scripts/run.bat, or go back to step 1, choose a new output directory and enable validation.</Notice>}
 
           {history.length > 0 && (
-            <Collapse ghost size="small" items={[{key:'history', label:'查看执行记录与诊断', children:<Timeline
+            <Collapse ghost size="small" items={[{key:'history', label:'View execution history and diagnostics', children:<Timeline
               style={{ marginBottom: 16 }}
               items={history.map((h) => ({
                 color: ERROR_STATUSES.has(h.status) ? 'red' : OK_FINAL.has(h.status) ? 'green' : 'blue',
@@ -221,18 +221,18 @@ export default function BuildPanel({
             />}]} />
           )}
 
-          <Collapse ghost size="small" items={[{key:'logs', label:'查看转换日志（实时）', children:<div className="console">{log || '（等待转换器输出…）'}</div>}]} />
+          <Collapse ghost size="small" items={[{key:'logs', label:'View conversion log (live)', children:<div className="console">{log || '(waiting for converter output…)'}</div>}]} />
 
           {artifacts.length > 0 && (
-            <Collapse ghost size="small" items={[{key:'artifacts', label:'查看产物与文件位置', children:<Table
+            <Collapse ghost size="small" items={[{key:'artifacts', label:'View artifacts and file locations', children:<Table
                 size="small"
                 pagination={false}
                 rowKey="name"
                 dataSource={artifacts}
                 columns={[
-                  { title: '名称', dataIndex: 'name', width: 150 },
-                  { title: '路径', dataIndex: 'path', render: (v: string) => <span className="mono">{v}</span> },
-                  { title: '大小', dataIndex: 'bytes', width: 100, render: (v: number) => humanBytes(v) },
+                  { title: 'Name', dataIndex: 'name', width: 150 },
+                  { title: 'Path', dataIndex: 'path', render: (v: string) => <span className="mono">{v}</span> },
+                  { title: 'Size', dataIndex: 'bytes', width: 100, render: (v: number) => humanBytes(v) },
                   {
                     title: 'SHA256',
                     dataIndex: 'sha256',
@@ -245,17 +245,17 @@ export default function BuildPanel({
 
           {measurements && (
             <>
-              <div className="subhead">测量摘要（诚实标注）</div>
+              <div className="subhead">Measurement summary (honestly labeled)</div>
               <div className="facts">
-                <Fact label="生成 tok/s" value={metricNode(measurements.performance?.decode_tok_s)} />
-                <Fact label="预填充 tok/s" value={metricNode(measurements.performance?.prefill_tok_s)} />
-                <Fact label="困惑度" value={metricNode(measurements.quality?.perplexity)} />
-                <Fact label="量化损失" value={metricNode(measurements.quality?.quantization_loss)} />
+                <Fact label="Generation tok/s" value={metricNode(measurements.performance?.decode_tok_s)} />
+                <Fact label="Prefill tok/s" value={metricNode(measurements.performance?.prefill_tok_s)} />
+                <Fact label="Perplexity" value={metricNode(measurements.quality?.perplexity)} />
+                <Fact label="Quantization loss" value={metricNode(measurements.quality?.quantization_loss)} />
               </div>
             </>
           )}
 
-          <Collapse ghost size="small" items={[{key:'reports', label:'查看完整性能与质量报告', children:<ReportViewer performance={performance} quality={quality} />}]} />
+          <Collapse ghost size="small" items={[{key:'reports', label:'View full performance and quality reports', children:<ReportViewer performance={performance} quality={quality} />}]} />
         </div>
       )}
     </Panel>

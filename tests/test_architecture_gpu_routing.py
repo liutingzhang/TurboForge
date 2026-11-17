@@ -126,7 +126,7 @@ def test_choices_blackwell_prioritizes_native_nvfp4():
     assert result["gpu"]["compute_cap"] == 12.0
     first = result["targets"][0]
     assert "nvfp4" in first["value"]
-    assert first["gpu_note"] == "本卡原生 FP4 加速"
+    assert first["gpu_note"] == "Native FP4 acceleration on this GPU"
     ninfer = [t["value"] for t in result["targets"] if t["engine"] == "ninfer"]
     assert ninfer.index("bonsai2_27b_ternary") < ninfer.index("qwen3_8_27b")
 
@@ -135,7 +135,7 @@ def test_choices_ada_labels_nvfp4_as_non_native():
     with patch("turboforge.precheck.detect_gpu", return_value=_gpu(8.9)):
         result = choices(_DENSE_27B)
     nvfp4 = next(t for t in result["targets"] if t["value"] == "qwen3_8_27b_nvfp4")
-    assert nvfp4["gpu_note"] == "本卡无原生 FP4，需反量化，未必提速"
+    assert nvfp4["gpu_note"] == "No native FP4 on this GPU; dequantization is required and speedup is not guaranteed"
     ninfer = [t["value"] for t in result["targets"] if t["engine"] == "ninfer"]
     assert ninfer.index("bonsai2_27b_ternary") < ninfer.index("qwen3_8_27b_nvfp4")
 
@@ -163,16 +163,16 @@ def test_explicit_layout_choice_requires_explicit_target():
     # Ordering/labels are presentation only; no target is flagged as the single
     # auto recommendation (that stays with the planner's unchanged auto policy).
     assert all("recommended" not in t for t in result["targets"])
-    assert result["targets"][0]["gpu_note"] == "本卡原生 FP4 加速"
+    assert result["targets"][0]["gpu_note"] == "Native FP4 acceleration on this GPU"
 
 
 def test_gpu_note_fp8_and_mxfp4_native_thresholds():
     fp8 = SimpleNamespace(storage_formats=(FMT_FP8,), extra_sources=())
-    assert _gpu_scheme_note(fp8, 8.9) == "本卡原生 FP8 加速"
-    assert _gpu_scheme_note(fp8, 8.6) == "本卡无原生 FP8，需反量化，未必提速"
+    assert _gpu_scheme_note(fp8, 8.9) == "Native FP8 acceleration on this GPU"
+    assert _gpu_scheme_note(fp8, 8.6) == "No native FP8 on this GPU; dequantization is required and speedup is not guaranteed"
     mxfp4 = SimpleNamespace(storage_formats=("gguf_mxfp4",), extra_sources=())
-    assert _gpu_scheme_note(mxfp4, 12.0) == "本卡原生 MXFP4 加速"
-    assert _gpu_scheme_note(mxfp4, 8.9) == "本卡无原生 MXFP4，需反量化，未必提速"
+    assert _gpu_scheme_note(mxfp4, 12.0) == "Native MXFP4 acceleration on this GPU"
+    assert _gpu_scheme_note(mxfp4, 8.9) == "No native MXFP4 on this GPU; dequantization is required and speedup is not guaranteed"
     groupwise = SimpleNamespace(storage_formats=("q4_g64_fp16",), extra_sources=())
     assert _gpu_scheme_note(groupwise, 12.0) is None
 
@@ -191,7 +191,7 @@ def test_moe_engine_recommendation_blackwell_prefers_basalt():
     assert rec is result["runtime_engine"]
     assert "github.com/jesdga95/basalt" in rec["url"] and "J12" in rec["steps"]
     assert "sm_120" in rec["reason"]
-    assert "不集成" in rec["advisory"] and ".ninfer" in rec["advisory"]
+    assert "no engine integration" in rec["advisory"] and ".ninfer" in rec["advisory"]
     # Adapted model needs no compatibility banner.
     assert not rec.get("compat_check")
 
@@ -202,23 +202,23 @@ def test_moe_engine_recommendation_35b_a3b_is_strata_even_on_blackwell():
     with patch("turboforge.precheck.detect_gpu", return_value=_gpu(12.0)):
         rec = choices(_MOE_35B)["moe_engine"]
     assert rec["engine"] == "strata"
-    assert "已发布列表不含本模型" in rec["reason"]
+    assert "published list does not include this model" in rec["reason"]
     assert "Qwen3.6-35B-A3B" in rec["models"]
     # Blackwell + unadapted: surface the faster-Basalt compatibility decision up
     # front instead of silently routing away from it.
-    assert "更快" in rec["compat_check"] and "自行核对" in rec["compat_check"]
+    assert "usually faster" in rec["compat_check"] and "Check yourself" in rec["compat_check"]
 
 
 def test_moe_engine_recommendation_unknown_family_gets_no_engine_promise():
     with patch("turboforge.precheck.detect_gpu", return_value=_gpu(12.0)):
         rec = choices(_MOE_UNKNOWN)["moe_engine"]
     assert rec["engine"] == "strata"
-    assert "更快" in rec["compat_check"] and "不在 Strata 已发布列表" in rec["compat_check"]
+    assert "usually faster" in rec["compat_check"] and "not in Strata's published list" in rec["compat_check"]
     with patch("turboforge.precheck.detect_gpu", return_value=_gpu(8.9)):
         rec = choices(_MOE_UNKNOWN)["moe_engine"]
     assert rec["engine"] == "strata"
     assert not rec.get("compat_check")
-    assert "不在两引擎已发布模型列表" in rec["reason"]
+    assert "not in either engine's published model list" in rec["reason"]
 
 
 def test_datacenter_blackwell_is_not_consumer_rtx50():
@@ -243,7 +243,7 @@ def test_moe_engine_recommendation_non_blackwell_prefers_strata():
     with patch("turboforge.precheck.detect_gpu", return_value=None):
         rec = choices(_MOE_35B)["moe_engine"]
     assert rec["engine"] == "strata"
-    assert "未检测到 NVIDIA" in rec["reason"]
+    assert "No NVIDIA GPU detected" in rec["reason"]
     assert not rec.get("compat_check")
 
 

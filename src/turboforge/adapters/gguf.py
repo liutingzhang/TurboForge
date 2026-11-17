@@ -148,7 +148,7 @@ class GGUFAdapter(InputAdapter):
                 shards = [path.parent / f"{match[1]}-{number:05}-of-{int(match[2]):05}.gguf"
                           for number in range(1, int(match[2]) + 1)]
                 if any(not shard.is_file() for shard in shards):
-                    raise GGUFFormatError("GGUF 分片不完整，不能判定推测头是否齐全")
+                    raise GGUFFormatError("GGUF shards are incomplete; cannot determine whether the speculative heads are complete")
         else:
             shards = sorted(path.glob("*.gguf"), key=lambda p: p.as_posix().lower())
         if not shards:
@@ -200,7 +200,7 @@ class GGUFAdapter(InputAdapter):
         if any("dflash2" in name.lower() for name in tensor_names):
             speculative["dflash2"] = {"detected": True, "compatibility_verified": False}
         elif any("dflash" in name.lower() for name in tensor_names):
-            speculative["dflash_hint"] = "检测到 DFlash 名称，不能当成 DFlash2 兼容证明"
+            speculative["dflash_hint"] = "A DFlash name was detected; this is not proof of DFlash2 compatibility"
 
         return ModelInspection(
             path=str(path),

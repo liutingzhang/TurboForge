@@ -11,7 +11,7 @@ $startupLog = Join-Path $logRoot ('startup-' + (Get-Date -Format 'yyyyMMdd-HHmms
 Start-Transcript -Path $startupLog -Force | Out-Null
 try {
 if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
-    throw '一键部署需要 Windows x64；不支持 32 位系统或 ARM64。'
+    throw 'One-click deployment requires Windows x64; 32-bit systems and ARM64 are not supported.'
 }
 
 # A pinned standalone interpreter avoids old host Python and registry changes.
@@ -21,19 +21,19 @@ $bootstrapPython = Get-TurboForgePython -ProjectRoot $projectRoot -DownloadRoot 
 $venvRoot = Join-Path $managedRoot 'venv-py31318'
 $managedPython = Join-Path $venvRoot 'Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $managedPython)) {
-    Write-Host '正在准备 TurboForge 专用 Python 环境...'
+    Write-Host 'Preparing the dedicated TurboForge Python environment...'
     & $bootstrapPython -m venv $venvRoot
-    if ($LASTEXITCODE -ne 0) { throw 'Python 环境创建失败。' }
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to create the Python environment.' }
 }
 & $managedPython -c "import sys;sys.exit(0 if sys.prefix != sys.base_prefix else 1)" 2>$null
-if ($LASTEXITCODE -ne 0) { throw '专用 Python 环境已损坏或移动后失效。请删除项目 .turboforge\venv-py31318 后重新启动；模型与其他缓存可保留。' }
+if ($LASTEXITCODE -ne 0) { throw 'The dedicated Python environment is corrupted or invalid after being moved. Delete .turboforge\venv-py31318 in the project and start again; models and other caches can be kept.' }
 $env:PYTHONIOENCODING = 'utf-8'
 $env:TURBOFORGE_HOME = $managedRoot
 & $managedPython (Join-Path $PSScriptRoot 'start_web.py') @args
 $startupExit = $LASTEXITCODE
 } catch {
-    Write-Host ('启动失败：' + $_.Exception.Message) -ForegroundColor Red
-    Write-Host ('完整日志：' + $startupLog)
+    Write-Host ('Startup failed: ' + $_.Exception.Message) -ForegroundColor Red
+    Write-Host ('Full log: ' + $startupLog)
     $startupExit = 1
 } finally {
     Stop-Transcript | Out-Null

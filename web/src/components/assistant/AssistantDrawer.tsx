@@ -49,11 +49,11 @@ export default function AssistantDrawer({context, children}: {context: Assistant
       setConversationId(history.conversation_id);
       setTurns(history.turns.map((turn,index) => {
         let prompt = turn.messages.find(m => m.role === 'user')?.content ?? '';
-        try {prompt = (JSON.parse(prompt) as {question: string}).question;} catch {prompt = '历史问题';}
+        try {prompt = (JSON.parse(prompt) as {question: string}).question;} catch {prompt = 'Past question';}
         return {id:`restored-${index}`,question:prompt,answer:turn.messages.find(m => m.role === 'assistant')?.content ?? '',
           references:turn.references,capturedAt:turn.captured_at,buildId:turn.build_id};
       }));
-      if (history.build_id !== context.buildId) {setNotice('恢复的是旧任务对话；新提问将建立新的上下文。'); setConversationId(null);}
+      if (history.build_id !== context.buildId) {setNotice('Restored a conversation from an older task; new questions will build a new context.'); setConversationId(null);}
     }).catch(() => {sessionStorage.removeItem('turboforge.assistant.conversation');});
     return () => {mounted.current = false; controller.current?.abort();};
   }, [refreshConfig]); // Bootstrap once; task changes are handled separately below.
@@ -61,19 +61,19 @@ export default function AssistantDrawer({context, children}: {context: Assistant
   const stop = useCallback(() => {
     if (requestId.current) assistantApi.cancel(requestId.current).catch(() => undefined);
     controller.current?.abort();
-    setNotice('已停止读取回答；上游仍可能计费。');
+    setNotice('Stopped reading the answer; the upstream may still bill.');
   }, []);
   useEffect(() => {
     if (savedBoundary.current && savedBoundary.current !== currentBoundary) {
       if (controller.current) stop();
       setConversationId(null); setBlocks([]); setSnapshot(null); setIncludeLogs(false); setCapturedAt('');
       sessionStorage.removeItem('turboforge.assistant.conversation');
-      setNotice('模型或任务已变化。历史回答仍属于旧快照，新提问使用新的上下文。');
+      setNotice('The model or task changed. Past answers belong to the old snapshot; new questions use the new context.');
     }
     savedBoundary.current = currentBoundary;
   }, [currentBoundary, stop]);
   useEffect(() => {
-    if (previousSummary.current !== summaryText) {setSnapshot(null); if (turns.length) setNotice('页面状态已变化，历史回答基于先前快照。');}
+    if (previousSummary.current !== summaryText) {setSnapshot(null); if (turns.length) setNotice('The page state changed; past answers are based on the earlier snapshot.');}
     previousSummary.current = summaryText;
   }, [summaryText, turns.length]);
 
@@ -81,7 +81,7 @@ export default function AssistantDrawer({context, children}: {context: Assistant
     const next = [...blocks, ...selected.filter(item => !blocks.some(old => old.id === item.id && old.text === item.text))];
     validateSelections(next);
     setBlocks(next); setCapturedAt(new Date().toISOString()); setSnapshot(null); setSelecting(false); setOpen(true); setSettings(false); setTab('chat');
-    setQuestion(value => value || '请用简单的话解释这里，并告诉我下一步。');
+    setQuestion(value => value || 'Explain this in simple terms and tell me the next step.');
   }, [blocks]);
   const selectionError = useCallback((value: string) => {message.info(value);}, [message]);
   const cancelSelection = useCallback(() => {setSelecting(false); setOpen(true);}, []);
@@ -138,21 +138,21 @@ export default function AssistantDrawer({context, children}: {context: Assistant
           requestId.current = metadata.request_id; setConversationId(metadata.conversation_id);
           sessionStorage.setItem('turboforge.assistant.conversation', metadata.conversation_id);
           updateTurn(id,{references:metadata.references,capturedAt:metadata.captured_at});
-          if (metadata.history_trimmed) setNotice('为适配模型窗口，本次未附带全部历史对话。');
+          if (metadata.history_trimmed) setNotice('To fit the model window, not all past conversation was included this time.');
         },
         delta: text => updateTurn(id,turn => ({answer:turn.answer + text})),
         done: data => updateTurn(id,{done:data}),
       });
       if (sentBoundary === boundaryRef.current) setQuestion('');
     } catch (err) {
-      updateTurn(id,{error:abort.signal.aborted ? '已停止，回答未完成' : (err as Error).message});
+      updateTurn(id,{error:abort.signal.aborted ? 'Stopped; the answer is incomplete' : (err as Error).message});
     } finally {
       controller.current = null; requestId.current = null; setBusy(false);
     }
   };
   const preview = async () => {
     setError('');
-    try {setSnapshot(await assistantApi.preview({...input(),question:question.trim() || '查看当前资料'}));}
+    try {setSnapshot(await assistantApi.preview({...input(),question:question.trim() || 'Review the current materials'}));}
     catch (err) {setError((err as Error).message);}
   };
   const newConversation = async () => {
@@ -166,42 +166,42 @@ export default function AssistantDrawer({context, children}: {context: Assistant
   };
   const locate = (topic: string) => {
     if (topic === 'connection') {setSettings(true); return;}
-    if (!locateTopic(topic)) message.info('当前步骤未显示该区域，请先切换到相关步骤。');
+    if (!locateTopic(topic)) message.info('That area is not visible in the current step; switch to the related step first.');
   };
-  const askHelp = (entry: HelpEntry) => {setTab('chat'); setSettings(false); setQuestion(`请结合我当前的情况解释：${entry.title}`);};
-  let destination = '尚未配置';
-  try {if (config?.base_url) destination = new URL(config.base_url).host;} catch {destination = '地址无效';}
+  const askHelp = (entry: HelpEntry) => {setTab('chat'); setSettings(false); setQuestion(`Explain this in my current situation: ${entry.title}`);};
+  let destination = 'Not configured';
+  try {if (config?.base_url) destination = new URL(config.base_url).host;} catch {destination = 'Invalid address';}
   return <>{children}
-    {!open && !selecting && <Button ref={launch} type="primary" className="ai-launcher" icon={<MessageOutlined />} aria-label="打开 TurboForge AI 助手" data-ai-ignore onMouseDown={event => {
+    {!open && !selecting && <Button ref={launch} type="primary" className="ai-launcher" icon={<MessageOutlined />} aria-label="Open the TurboForge AI assistant" data-ai-ignore onMouseDown={event => {
       const selected = textSelection(); if (selected) {event.preventDefault(); try {addBlocks([selected]);} catch (err) {message.info((err as Error).message);}}
-    }} onClick={() => setOpen(true)}>问 AI</Button>}
+    }} onClick={() => setOpen(true)}>Ask AI</Button>}
     {selecting && <><div className="ai-selection-toolbar" data-ai-ignore data-ai-selection-control>
-      <span>点选区域，拖动可框选，Esc 取消；可滚动后重新选择。</span><Button onClick={cancelSelection}>取消选取</Button></div>
+      <span>Click an area, drag to box-select, Esc to cancel; you can scroll and reselect.</span><Button onClick={cancelSelection}>Cancel selection</Button></div>
       {rectangle && <div className="ai-selection-rectangle" data-ai-ignore style={{left:rectangle.x,top:rectangle.y,width:rectangle.width,height:rectangle.height}} />}</>}
-    <Drawer width={480} open={open} mask={false} rootClassName="ai-drawer-root" title={<Space>TurboForge 助手<Tag color={config?.configured ? 'green' : 'default'}>{config?.configured ? '已配置' : '未连接'}</Tag></Space>}
+    <Drawer width={480} open={open} mask={false} rootClassName="ai-drawer-root" title={<Space>TurboForge assistant<Tag color={config?.configured ? 'green' : 'default'}>{config?.configured ? 'Configured' : 'Not connected'}</Tag></Space>}
       onClose={() => settings ? setSettings(false) : setOpen(false)} afterOpenChange={visible => {
         // rc-drawer restores its old active element after invoking this callback.
         if (!visible && !selecting) queueMicrotask(() => launch.current?.focus({preventScroll:true}));
       }}
-      extra={<Space size={0}><Button type="text" aria-label="助手设置" icon={<SettingOutlined />} onClick={() => setSettings(v => !v)} />
-        <Button type="text" disabled={busy} onClick={newConversation}>新对话</Button></Space>}
+      extra={<Space size={0}><Button type="text" aria-label="Assistant settings" icon={<SettingOutlined />} onClick={() => setSettings(v => !v)} />
+        <Button type="text" disabled={busy} onClick={newConversation}>New conversation</Button></Space>}
       styles={{body:{padding:16,display:'flex',flexDirection:'column',gap:12}}}>
       <div data-ai-ignore className="ai-drawer-content">
-        {settings ? <><Button type="link" onClick={() => setSettings(false)}>返回问答</Button>{config ? <AssistantSettings key={configVersion} config={config} onSaved={refreshConfig} /> : <Button onClick={() => refreshConfig().catch(err => setError((err as Error).message))}>重新读取配置</Button>}</> : <>
-          <Tabs activeKey={tab} onChange={setTab} items={[{key:'chat',label:'问 AI'},{key:'help',label:'帮助中心'}]} />
+        {settings ? <><Button type="link" onClick={() => setSettings(false)}>Back to chat</Button>{config ? <AssistantSettings key={configVersion} config={config} onSaved={refreshConfig} /> : <Button onClick={() => refreshConfig().catch(err => setError((err as Error).message))}>Reload configuration</Button>}</> : <>
+          <Tabs activeKey={tab} onChange={setTab} items={[{key:'chat',label:'Ask AI'},{key:'help',label:'Help center'}]} />
           {tab === 'help' ? <HelpCenter initialId={helpId} onAsk={askHelp} /> : <>
-            {(!config?.configured || config.config_error) && <Alert type="info" showIcon message="连接 AI 后可结合页面提问，也可直接查帮助中心" action={<Button size="small" onClick={() => setSettings(true)}>配置连接</Button>} />}
+            {(!config?.configured || config.config_error) && <Alert type="info" showIcon message="After connecting AI you can ask about the page, or browse the help center directly" action={<Button size="small" onClick={() => setSettings(true)}>Configure connection</Button>} />}
             {notice && <Alert type="info" message={notice} closable onClose={() => setNotice('')} />}
-            <ContextPreview blocks={blocks} setBlocks={value => {setBlocks(value); setSnapshot(null); if (!value.length) {setCapturedAt(''); setQuestion(current => current === '请用简单的话解释这里，并告诉我下一步。' ? '' : current);}}} summary={context.summary}
+            <ContextPreview blocks={blocks} setBlocks={value => {setBlocks(value); setSnapshot(null); if (!value.length) {setCapturedAt(''); setQuestion(current => current === 'Explain this in simple terms and tell me the next step.' ? '' : current);}}} summary={context.summary}
               snapshot={snapshot} includeSummary={includeSummary} setIncludeSummary={value => {setIncludeSummary(value); setSnapshot(null);}}
               includeLogs={includeLogs} setIncludeLogs={value => {setIncludeLogs(value); setSnapshot(null);}} capturedAt={capturedAt} disabled={busy} onRefresh={preview} />
             <Conversation turns={turns} onReference={id => {setHelpId(id); setTab('help');}} onLocate={locate} />
-            <div className="ai-composer"><Space wrap><Button icon={<SelectOutlined />} onClick={selectPage} disabled={busy}>选取页面</Button>
-              <Button size="small" disabled={busy} onClick={() => setQuestion('当前问题为什么发生，我应该怎么处理？')}>为什么失败</Button><Button size="small" disabled={busy} onClick={() => setQuestion('根据当前状态，我下一步应该做什么？')}>下一步</Button></Space>
-              <Input.TextArea ref={questionInput} aria-label="向 AI 提问" value={question} maxLength={2000} showCount disabled={busy}
-                placeholder="补充你的问题……" autoSize={{minRows:3,maxRows:7}} onChange={e => setQuestion(e.target.value)}
+            <div className="ai-composer"><Space wrap><Button icon={<SelectOutlined />} onClick={selectPage} disabled={busy}>Select page</Button>
+              <Button size="small" disabled={busy} onClick={() => setQuestion('Why did the current problem happen, and how should I handle it?')}>Why it failed</Button><Button size="small" disabled={busy} onClick={() => setQuestion('Based on the current state, what should I do next?')}>Next step</Button></Space>
+              <Input.TextArea ref={questionInput} aria-label="Ask the AI" value={question} maxLength={2000} showCount disabled={busy}
+                placeholder="Add your question…" autoSize={{minRows:3,maxRows:7}} onChange={e => setQuestion(e.target.value)}
                 onKeyDown={e => {if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {e.preventDefault(); void send();}}} />
-              <div className="ai-composer-actions"><small>将发给：{destination}</small>{busy ? <Button danger icon={<CloseOutlined />} onClick={stop}>停止回答</Button> : <Button type="primary" disabled={!question.trim()} onClick={send}>发送</Button>}</div>
+              <div className="ai-composer-actions"><small>Will be sent to: {destination}</small>{busy ? <Button danger icon={<CloseOutlined />} onClick={stop}>Stop answer</Button> : <Button type="primary" disabled={!question.trim()} onClick={send}>Send</Button>}</div>
             </div>
           </>}
         </>}

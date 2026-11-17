@@ -29,7 +29,7 @@ def _dist_dir() -> Path:
 
 
 _BUILD_NOTICE = """<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>TurboForge</title>
+<html lang="en"><head><meta charset="utf-8"><title>TurboForge</title>
 <style>
 :root{color-scheme:dark}
 body{margin:0;min-height:100vh;display:grid;place-items:center;
@@ -47,12 +47,12 @@ code{display:block;background:#0b0f13;border:1px solid #223041;border-radius:8px
 a{color:#38bdf8}
 </style></head><body><div class="card">
 <h1><span class="spark">&#9670;</span> TurboForge</h1>
-<p>前端尚未构建。API 已就绪，构建界面后即可使用完整 GUI：</p>
+<p>The frontend has not been built yet. The API is ready; build the UI to use the full GUI:</p>
 <code>cd web
 npm install
 npm run build</code>
-<p>构建完成后刷新本页。开发模式可运行 <code style="display:inline;padding:2px 6px">npm run dev</code>
-（Vite 会将 /api 代理到本服务）。</p>
+<p>Refresh this page after the build. For development run <code style="display:inline;padding:2px 6px">npm run dev</code>
+(Vite proxies /api to this service).</p>
 </div></body></html>"""
 
 
@@ -75,13 +75,13 @@ def create_app(planner: ForgePlanner | None = None, *, assistant_root: Path | No
         # Loopback binding alone does not prevent DNS rebinding or cross-site
         # requests from another website open in the same browser.
         if not loopback(urlsplit(request.host_url).hostname or "") or not loopback(request.remote_addr or ""):
-            return jsonify({"error": "本工具仅供本机使用，请使用启动窗口显示的 localhost 地址"}), 403
+            return jsonify({"error": "This tool is local-only; use the localhost address shown in the launcher window"}), 403
         if request.path.startswith("/api/"):
             incoming = request.headers.get("Origin")
             if request.headers.get("Sec-Fetch-Site") == "cross-site" or incoming and incoming != request.host_url.rstrip("/"):
-                return jsonify({"error": "已拒绝跨站操作，请从本机页面重试"}), 403
+                return jsonify({"error": "Cross-site operation rejected; retry from the local page"}), 403
             if request.method in ("POST", "PUT", "PATCH") and request.content_length and request.mimetype != "application/json":
-                return jsonify({"error": "操作参数必须使用 JSON"}), 415
+                return jsonify({"error": "Operation parameters must use JSON"}), 415
 
     register_assistant(app, manager, assistant_root)
     inspector = ModelInspector()
@@ -99,10 +99,10 @@ def create_app(planner: ForgePlanner | None = None, *, assistant_root: Path | No
     def api_auto_build():
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("model"), str) or not body["model"].strip():
-            return jsonify({"error": "请提供模型路径或 Hugging Face 模型名"}), 400
+            return jsonify({"error": "Provide a model path or Hugging Face model name"}), 400
         options = body.get("options", {})
         if not isinstance(options, dict):
-            return jsonify({"error": "options 必须是对象"}), 400
+            return jsonify({"error": "options must be an object"}), 400
         try:
             return jsonify({"build_id": manager.start(None, model=body["model"].strip(), options=options)})
         except RuntimeError as exc:
@@ -113,7 +113,7 @@ def create_app(planner: ForgePlanner | None = None, *, assistant_root: Path | No
         from .native import pick_path
         body = request.get_json(silent=True) or {}
         if not isinstance(body, dict):
-            return jsonify({"error":"请选择文件或文件夹"}), 400
+            return jsonify({"error":"Select a file or folder"}), 400
         try:
             return jsonify({"path": pick_path(body.get("kind"))})
         except ValueError as exc:
@@ -142,18 +142,18 @@ def create_app(planner: ForgePlanner | None = None, *, assistant_root: Path | No
     def api_precheck():
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("model"), str) or not body["model"].strip():
-            return jsonify({"error": "请先选择模型"}), 400
+            return jsonify({"error": "Select a model first"}), 400
         from ..precheck import precheck
         original = body.get("original_model")
         if original is not None and (not isinstance(original, str) or not original.strip()):
-            return jsonify({"error":"原始来源必须是非空路径或仓库链接"}), 400
+            return jsonify({"error":"The original source must be a non-empty path or repository link"}), 400
         return jsonify(precheck(body["model"].strip(), original))
 
     @app.post("/api/inspect")
     def api_inspect():
         body = request.get_json(force=True, silent=True) or {}
         if not isinstance(body, dict):
-            return jsonify({"error":"模型检查参数必须是对象"}), 400
+            return jsonify({"error":"Model inspection parameters must be an object"}), 400
         input_path = body.get("input_path")
         if not isinstance(input_path, str) or not input_path.strip():
             return jsonify({"error": "input_path is required"}), 400

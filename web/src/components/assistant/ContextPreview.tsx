@@ -15,20 +15,20 @@ export default function ContextPreview({blocks, setBlocks, summary, snapshot, in
     anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return <div className="ai-context">
-    <Collapse size="small" items={[{key:'context', label:`发送内容预览 · ${blocks.length} 个选区`, children:<>
+    <Collapse size="small" items={[{key:'context', label:`Outgoing content preview · ${blocks.length} selection(s)`, children:<>
       {blocks.map((block,index) => <div key={`${block.id}-${index}`} className="ai-context-block">
-        <Space><strong>{block.title}</strong><Button size="small" type="text" disabled={disabled} onClick={() => setBlocks(blocks.filter((_,i) => i !== index))}>移除</Button></Space>
-        <Input.TextArea aria-label={`选区内容 ${index + 1}`} value={block.text} autoSize={{minRows:2,maxRows:6}} disabled={disabled}
+        <Space><strong>{block.title}</strong><Button size="small" type="text" disabled={disabled} onClick={() => setBlocks(blocks.filter((_,i) => i !== index))}>Remove</Button></Space>
+        <Input.TextArea aria-label={`Selection content ${index + 1}`} value={block.text} autoSize={{minRows:2,maxRows:6}} disabled={disabled}
           onChange={e => setBlocks(blocks.map((b,i) => i === index ? {...b,text:e.target.value} : b))} />
       </div>)}
-      <Checkbox checked={includeSummary} disabled={disabled} onChange={e => setIncludeSummary(e.target.checked)}>附带当前模型与业务摘要</Checkbox>
-      <Checkbox checked={includeLogs} disabled={disabled} onChange={e => setIncludeLogs(e.target.checked)}>附带当前任务日志尾部（最多 120 行/12KiB）</Checkbox>
-      {includeSummary && <details><summary>页面摘要（辅助材料）</summary><pre>{JSON.stringify(summary,null,2)}</pre></details>}
-      <Button size="small" disabled={disabled} onClick={onRefresh}>刷新并查看后端发送快照</Button>
-      <Button size="small" disabled={disabled || !snapshot} onClick={exportSnapshot}>导出当前脱敏诊断</Button>
+      <Checkbox checked={includeSummary} disabled={disabled} onChange={e => setIncludeSummary(e.target.checked)}>Include the current model and workflow summary</Checkbox>
+      <Checkbox checked={includeLogs} disabled={disabled} onChange={e => setIncludeLogs(e.target.checked)}>Include the current task log tail (up to 120 lines / 12 KiB)</Checkbox>
+      {includeSummary && <details><summary>Page summary (supporting material)</summary><pre>{JSON.stringify(summary,null,2)}</pre></details>}
+      <Button size="small" disabled={disabled} onClick={onRefresh}>Refresh and view the backend send snapshot</Button>
+      <Button size="small" disabled={disabled || !snapshot} onClick={exportSnapshot}>Export the current redacted diagnostics</Button>
       {snapshot && <pre className="ai-snapshot">{JSON.stringify(snapshot,null,2)}</pre>}
-      {capturedAt && <small>选取于 {new Date(capturedAt).toLocaleTimeString()}；页面变化后请重新选取。</small>}
-      <Alert type="info" showIcon message="只发送你确认的选区与勾选资料。日志可能包含私密信息，请检查预览；可取消附带或移除选区。" />
+      {capturedAt && <small>Captured at {new Date(capturedAt).toLocaleTimeString()}; reselect after the page changes.</small>}
+      <Alert type="info" showIcon message="Only the selections and checked materials you confirm are sent. Logs may contain private information; review the preview. You can uncheck attachments or remove selections." />
     </>}]} />
   </div>;
 }

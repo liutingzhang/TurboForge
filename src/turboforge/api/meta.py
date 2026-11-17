@@ -39,24 +39,24 @@ def _module_available(name: str) -> bool:
 # -- human-facing descriptions ----------------------------------------------
 
 _JAILBREAK_INFO = {
-    "none": ("不越狱", "保持原始权重，直接量化转换"),
-    "heretic": ("Heretic 一键越狱", "自动调用本地 heretic（pip install -U heretic-llm）；"
-                 "独立窗口运行，结束时把权重保存到构建目录后自动继续量化"),
-    "abliteration": ("Abliteration 一键越狱", "拒绝方向正交化（torch，逐分片）；仅高精度权重，"
-                     "可用预计算方向或校准提示词"),
+    "none": ("No abliteration", "Keep the original weights and quantize/convert directly"),
+    "heretic": ("Heretic one-click abliteration", "Automatically invokes local heretic (pip install -U heretic-llm); "
+                 "runs in a separate window, saves the weights to the build directory when finished, then continues quantization automatically"),
+    "abliteration": ("Abliteration one-click", "Refusal-direction orthogonalization (torch, per shard); high-precision weights only, "
+                     "using a precomputed direction or calibration prompts"),
 }
 
 _DEVICE_INFO = {
-    "cuda": ("CUDA（GPU）", "在 GPU 上执行分组量化；最快，需 CUDA 版 torch"),
-    "cpu": ("CPU", "tools.convert 支持 --device cpu，但本机无实测计时，预计远慢于 CUDA"),
+    "cuda": ("CUDA (GPU)", "Grouped quantization on the GPU; fastest, requires CUDA torch"),
+    "cpu": ("CPU", "tools.convert supports --device cpu, but there is no measured timing on this machine; expect it to be far slower than CUDA"),
 }
 
 _INPUT_KIND_INFO = {
-    "safetensors": "HF safetensors 目录",
-    "nvfp4": "NVFP4 量化检查点",
-    "gguf": "GGUF 块文件",
-    "ninfer": "NInfer 产物",
-    "unknown": "未知 / 无法识别",
+    "safetensors": "HF safetensors directory",
+    "nvfp4": "NVFP4 quantized checkpoint",
+    "gguf": "GGUF block file",
+    "ninfer": "NInfer artifact",
+    "unknown": "Unknown / unrecognized",
 }
 
 
@@ -87,35 +87,35 @@ _PARAM_SCHEMAS: dict[str, list[dict[str, Any]]] = {
     "heretic": [],
     "abliteration": [
         _param(
-            "direction_file", "拒绝方向向量", "path",
+            "direction_file", "Refusal direction vector", "path",
             required_when_env_missing="transformers",
-            help_="预计算拒绝方向（.npy / .pt，长度等于 hidden_size，可由 heretic 导出）。"
-                  "未安装 transformers 时必填；已安装时可留空，由校准提示词自动采集。",
+            help_="Precomputed refusal direction (.npy / .pt, length equal to hidden_size, exportable from heretic). "
+                  "Required when transformers is not installed; otherwise leave empty to collect it automatically from calibration prompts.",
             placeholder="D:/vectors/refusal_direction.npy",
         ),
         _param(
-            "layer", "校准层索引", "int",
-            help_="采集激活的隐藏层索引；留空时取 num_hidden_layers // 2。",
-            placeholder="例如 32", advanced=True,
+            "layer", "Calibration layer index", "int",
+            help_="Hidden-layer index for collecting activations; empty uses num_hidden_layers // 2.",
+            placeholder="e.g. 32", advanced=True,
         ),
         _param(
-            "harmful_prompts", "有害校准提示词", "string_list",
-            help_="每行一条；留空使用内置默认集。仅在需要校准时使用。",
+            "harmful_prompts", "Harmful calibration prompts", "string_list",
+            help_="One per line; empty uses the built-in default set. Only used when calibration is needed.",
             advanced=True,
         ),
         _param(
-            "harmless_prompts", "无害校准提示词", "string_list",
-            help_="每行一条；留空使用内置默认集。仅在需要校准时使用。",
+            "harmless_prompts", "Harmless calibration prompts", "string_list",
+            help_="One per line; empty uses the built-in default set. Only used when calibration is needed.",
             advanced=True,
         ),
         _param(
-            "output_suffixes", "输出投影后缀", "string_list",
-            help_="要做正交化的输出张量后缀；留空使用默认集。高级选项。",
+            "output_suffixes", "Output projection suffixes", "string_list",
+            help_="Output tensor suffixes to orthogonalize; empty uses the default set. Advanced option.",
             advanced=True,
         ),
         _param(
-            "embedding_suffixes", "嵌入张量后缀", "string_list",
-            help_="要处理的嵌入张量后缀；留空使用默认集。高级选项。",
+            "embedding_suffixes", "Embedding tensor suffixes", "string_list",
+            help_="Embedding tensor suffixes to process; empty uses the default set. Advanced option.",
             advanced=True,
         ),
     ],

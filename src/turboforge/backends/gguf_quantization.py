@@ -9,12 +9,12 @@ from tools.convert.sources.logical import EncodedRows, LogicalSource
 
 def checked_quantize(rows, qtype):
     if not np.isfinite(rows).all():
-        raise ValueError("GGML 量化输入含 NaN/Inf")
+        raise ValueError("GGML quantization input contains NaN/Inf")
     with np.errstate(over="ignore",invalid="ignore",divide="ignore"):
         blocks = quantize(rows,qtype)
         restored = dequantize(blocks,qtype)
     if not np.isfinite(restored).all():
-        raise ValueError("GGML 量化块解码产生 NaN/Inf，拒绝保存溢出权重")
+        raise ValueError("GGML quantization block decoding produced NaN/Inf; saving overflowed weights is refused")
     return blocks
 
 
@@ -78,7 +78,7 @@ def standalone_qwen35(model, recipe, sources):
     atexit.register(raw.close)
     config = model.config
     if config['hidden_size'] != 1024 or raw.metadata().get('general.file_type') != 7:
-        raise ValueError('此独立导入配方仅支持 Qwen3.5 hidden_size=1024 的 Q8_0 GGUF')
+        raise ValueError('This standalone import recipe only supports Q8_0 GGUF for Qwen3.5 hidden_size=1024')
     names, transforms, shapes = standard_dense_name_map(
         config['num_hidden_layers'], tie_word_embeddings=config['tie_word_embeddings'], text_prefix='model.')
     for layer, kind in enumerate(config['layer_types']):

@@ -100,21 +100,21 @@ class RecipeSpec:
 
 
 RECIPES: tuple[RecipeSpec, ...] = (
-    RecipeSpec("qwen3_5_gguf_standalone", "GGUF 独立导入 · Q8_0（解码后重编码）",
+    RecipeSpec("qwen3_5_gguf_standalone", "GGUF standalone import · Q8_0 (decode then re-encode)",
                (InputKind.SAFETENSORS,), QWEN35_DENSE,
                (FMT_GGUF_Q8_0, "bf16", "fp32"), 8.0, None,
                extra_sources=("gguf",), components="text", hidden_sizes=(1024,),
                custom_function="standalone_qwen35",
-               notes=("从 GGUF 内嵌元数据生成资源，不需要原始 HF 检查点；Q8 权重经过解码和重编码，非逐字节无损导入。",)),
-    RecipeSpec("qwen3_5_gguf_q4_0", "GGML Q4_0 · Q8 嵌入与输出头", (InputKind.SAFETENSORS,), QWEN35_DENSE,
+               notes=("Resources are generated from the GGUF's embedded metadata; no original HF checkpoint is needed. Q8 weights are decoded and re-encoded, not a byte-for-byte lossless import.",)),
+    RecipeSpec("qwen3_5_gguf_q4_0", "GGML Q4_0 · Q8 embedding and output head", (InputKind.SAFETENSORS,), QWEN35_DENSE,
                ("gguf_q4_0", FMT_GGUF_Q8_0, "bf16", "fp32"), 4.0, None, components="text",
-               notes=("真实 GGML Q4_0 块量化；嵌入和输出头保留 Q8，并非 AWQ。",), custom_function="q4_0", hidden_sizes=(1024,)),
-    RecipeSpec("qwen3_5_gguf_q5_0", "GGML Q5_0 · Q8 嵌入与输出头", (InputKind.SAFETENSORS,), QWEN35_DENSE,
+               notes=("Real GGML Q4_0 block quantization; embedding and output head stay Q8, not AWQ.",), custom_function="q4_0", hidden_sizes=(1024,)),
+    RecipeSpec("qwen3_5_gguf_q5_0", "GGML Q5_0 · Q8 embedding and output head", (InputKind.SAFETENSORS,), QWEN35_DENSE,
                ("gguf_q5_0", FMT_GGUF_Q8_0, "bf16", "fp32"), 5.0, None, components="text",
-               notes=("真实 GGML Q5_0 块量化；嵌入和输出头保留 Q8，并非 AWQ。",), custom_function="q5_0", hidden_sizes=(1024,)),
-    RecipeSpec("qwen3_5_gguf_mxfp4", "GGML MXFP4 · Q8 嵌入与输出头", (InputKind.SAFETENSORS,), QWEN35_DENSE,
+               notes=("Real GGML Q5_0 block quantization; embedding and output head stay Q8, not AWQ.",), custom_function="q5_0", hidden_sizes=(1024,)),
+    RecipeSpec("qwen3_5_gguf_mxfp4", "GGML MXFP4 · Q8 embedding and output head", (InputKind.SAFETENSORS,), QWEN35_DENSE,
                ("gguf_mxfp4", FMT_GGUF_Q8_0, "bf16", "fp32"), 4.0, None, components="text",
-               notes=("真实 MXFP4 块浮点；不是 NVFP4 或 AWQ。",), custom_function="mxfp4", hidden_sizes=(1024,)),
+               notes=("Real MXFP4 block floating point; not NVFP4 or AWQ.",), custom_function="mxfp4", hidden_sizes=(1024,)),
     # --- Route 1: original BF16/FP16 safetensors, dense Qwen3.5 ------------
     RecipeSpec(
         "qwen3_8_27b", "Qwen3.8-27B groupwise Q4/Q5",
@@ -267,7 +267,7 @@ RECIPES: tuple[RecipeSpec, ...] = (
         notes=(GGUF_IS_SECONDARY,),
     ),
     RecipeSpec(
-        "qwen3_8_flash_next_gsq_q2", "Flash-Next 原生 Q2（仅 Q2_0 专家来源）",
+        "qwen3_8_flash_next_gsq_q2", "Flash-Next native Q2 (Q2_0 expert source only)",
         (InputKind.SAFETENSORS, InputKind.GGUF), FLASH_NEXT,
         ("q2_native",), 2.0, None,
         extra_sources=("gguf",), components="text,ngram",
@@ -401,8 +401,8 @@ def gpu_scheme_note(recipe: RecipeSpec, compute_cap: float | None) -> str | None
         return None
     label = _FP_FAMILY_LABEL[family]
     if compute_cap >= required:
-        return f"本卡原生 {label} 加速"
-    return f"本卡无原生 {label}，需反量化，未必提速"
+        return f"Native {label} acceleration on this GPU"
+    return f"No native {label} on this GPU; dequantization is required and speedup is not guaranteed"
 
 
 def gpu_scheme_order(recipe: RecipeSpec, compute_cap: float | None) -> tuple[int, float]:

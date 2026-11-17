@@ -23,15 +23,15 @@ class CompatibilityTest(unittest.TestCase):
 
     def test_missing_driver_is_actionable(self):
         with patch("turboforge.bootstrap.sys.platform", "win32"), patch("turboforge.bootstrap.platform.machine", return_value="AMD64"), patch("turboforge.bootstrap.subprocess.run", side_effect=FileNotFoundError):
-            with self.assertRaisesRegex(RuntimeError, "官方驱动"): cuda_package()
+            with self.assertRaisesRegex(RuntimeError, "official driver"): cuda_package()
 
     def test_small_remote_model_without_runtime_stops_before_weights(self):
         with patch("turboforge.bootstrap.local_tools", return_value=None):
-            with self.assertRaisesRegex(ValueError, "下载模型权重前停止"):
+            with self.assertRaisesRegex(ValueError, "Stopped before downloading model weights"):
                 check_config_support({"architectures":["Qwen3_5ForConditionalGeneration"], "text_config":{"hidden_size":1024}})
 
     def test_unknown_geometry_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "没有已接入转换路径"):
+        with self.assertRaisesRegex(ValueError, "no wired-in conversion path"):
             check_config_support({"architectures":["Unknown"]})
 
     def test_broken_bundle_does_not_fall_back_to_host_runtime(self):
@@ -40,7 +40,7 @@ class CompatibilityTest(unittest.TestCase):
             (root / "runtime").mkdir()
             (root / "runtime/bundle.json").write_text(json.dumps({"files":{"bin/ninfer.exe":"bad"}}))
             with patch("turboforge.bootstrap.__file__", str(root / "src/turboforge/bootstrap.py")), patch.dict(os.environ, {}, clear=True):
-                with self.assertRaisesRegex(RuntimeError, "损坏或缺失"): local_tools()
+                with self.assertRaisesRegex(RuntimeError, "corrupt or missing"): local_tools()
 
     def test_remote_small_model_checks_runtime_before_download(self):
         from turboforge.model_sources import ModelResolver
@@ -52,14 +52,14 @@ class CompatibilityTest(unittest.TestCase):
                 destination.write_text(json.dumps({"architectures":["Qwen3_5ForConditionalGeneration"], "text_config":{"hidden_size":1024}}))
                 return destination
             with patch.object(resolver, "info", return_value=info), patch("turboforge.model_sources.download", side_effect=download) as fetch, patch("turboforge.bootstrap.local_tools", return_value=None):
-                with self.assertRaisesRegex(ValueError, "下载模型权重前停止"):
+                with self.assertRaisesRegex(ValueError, "Stopped before downloading model weights"):
                     resolver.snapshot("Org/Small")
                 self.assertEqual(fetch.call_count, 1)
 
     def test_install_failure_surfaces_after_readable_download_progress(self):
         from turboforge.bootstrap import run
         messages = []
-        with self.assertRaisesRegex(RuntimeError, "退出码 9"):
+        with self.assertRaisesRegex(RuntimeError, "exit code 9"):
             run([sys.executable, "-c", "print('Progress 1048576 of 2097152');raise SystemExit(9)"], messages.append)
         self.assertTrue(any("50%" in message for message in messages))
 
@@ -84,4 +84,4 @@ class RuntimeTest(unittest.TestCase):
             root = Path(temp)
             (root / "engine.exe").touch()
             with patch("turboforge.windows_runtime.imports", return_value=["turboforge-missing.dll"]), patch.dict(os.environ, {"PATH":"", "SystemRoot":temp}):
-                with self.assertRaisesRegex(RuntimeError, "缺少运行库"): collect(root)
+                with self.assertRaisesRegex(RuntimeError, "missing runtime"): collect(root)

@@ -23,8 +23,8 @@ export function Notice({ tone = 'info', title, children }: { tone?: 'info' | 'wa
 
 export function Diag({ d }: { d: Diagnostic }) {
   return (
-    <div className={cx('diag', 'diag-' + d.severity)} data-ai-id={`diagnostic.${d.code}`} data-ai-code={d.code} data-ai-title="诊断">
-      <div className="diag-code">{d.code}<Button size="small" type="link" data-ai-ignore onClick={() => window.dispatchEvent(new CustomEvent('turboforge:ask', {detail:{id:`diagnostic.${d.code}`,title:'诊断',code:d.code,text:[d.message,...d.alternatives].join('\n')}}))}>解释此问题</Button></div>
+    <div className={cx('diag', 'diag-' + d.severity)} data-ai-id={`diagnostic.${d.code}`} data-ai-code={d.code} data-ai-title="Diagnostic">
+      <div className="diag-code">{d.code}<Button size="small" type="link" data-ai-ignore onClick={() => window.dispatchEvent(new CustomEvent('turboforge:ask', {detail:{id:`diagnostic.${d.code}`,title:'Diagnostic',code:d.code,text:[d.message,...d.alternatives].join('\n')}}))}>Explain this issue</Button></div>
       <div className="diag-msg">{d.message}</div>
       {d.alternatives.length > 0 && (
         <ul className="diag-alts">

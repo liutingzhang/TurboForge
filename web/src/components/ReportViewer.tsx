@@ -4,10 +4,10 @@ import { metricValueText } from '../utils/format';
 import { Chip, Fact, Notice } from './ui';
 
 const STATUS_META: Record<MetricStatus, { label: string; tone: 'ok' | 'info' | 'warn' | 'default' }> = {
-  measured: { label: '实测', tone: 'ok' },
-  configured: { label: '配置', tone: 'info' },
-  refused: { label: '拒绝', tone: 'warn' },
-  not_measured: { label: '未实测', tone: 'default' },
+  measured: { label: 'Measured', tone: 'ok' },
+  configured: { label: 'Configured', tone: 'info' },
+  refused: { label: 'Refused', tone: 'warn' },
+  not_measured: { label: 'Not measured', tone: 'default' },
 };
 
 function StatusChip({ status }: { status: MetricStatus }) {
@@ -24,15 +24,15 @@ function MetricTable({ report }: { report: Report }) {
       rowKey="name"
       dataSource={rows}
       columns={[
-        { title: '指标', dataIndex: 'name', width: 200, render: (v: string) => <span className="mono">{v}</span> },
+        { title: 'Metric', dataIndex: 'name', width: 200, render: (v: string) => <span className="mono">{v}</span> },
         {
-          title: '状态',
+          title: 'Status',
           dataIndex: 'status',
           width: 90,
           render: (v: MetricStatus) => <StatusChip status={v} />,
         },
         {
-          title: '值',
+          title: 'Value',
           dataIndex: 'value',
           render: (v: unknown, row: MetricEntry) =>
             row.status === 'measured' || row.status === 'configured' ? (
@@ -42,7 +42,7 @@ function MetricTable({ report }: { report: Report }) {
             ),
         },
         {
-          title: '备注 / 来源',
+          title: 'Notes / source',
           dataIndex: 'note',
           render: (v: string | undefined, row: MetricEntry) => (
             <span className="muted" style={{ fontSize: 12 }}>
@@ -61,7 +61,7 @@ function ReportBody({ report }: { report: Report | null }) {
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="报告尚未生成（构建完成后写入；未运行的指标保持「未实测」）"
+        description="The report has not been generated yet (written after the build completes; metrics that did not run stay 'Not measured')"
       />
     );
   }
@@ -87,7 +87,7 @@ function ReportBody({ report }: { report: Report | null }) {
           items={[
             {
               key: 'runs',
-              label: <span className="muted">工具运行记录（可复现，{runs.length}）</span>,
+              label: <span className="muted">Tool run records (reproducible, {runs.length})</span>,
               children: runs.map(([name, run]) => (
                 <div key={name} style={{ marginBottom: 12 }}>
                   <div className="mono" style={{ color: 'var(--info)' }}>
@@ -117,8 +117,8 @@ export default function ReportViewer({ performance, quality }: Props) {
     <Tabs
       size="small"
       items={[
-        { key: 'perf', label: '性能报告', children: <div data-ai-id="report.performance" data-ai-title="性能报告"><ReportBody report={performance} /></div> },
-        { key: 'qual', label: '质量报告', children: <div data-ai-id="quality.gate" data-ai-title="质量报告"><ReportBody report={quality} /></div> },
+        { key: 'perf', label: 'Performance report', children: <div data-ai-id="report.performance" data-ai-title="Performance report"><ReportBody report={performance} /></div> },
+        { key: 'qual', label: 'Quality report', children: <div data-ai-id="quality.gate" data-ai-title="Quality report"><ReportBody report={quality} /></div> },
       ]}
     />
   );

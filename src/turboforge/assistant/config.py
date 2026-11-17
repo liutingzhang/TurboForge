@@ -36,7 +36,7 @@ def parse_dotenv(text: str) -> dict[str, str]:
         if not key.startswith(PREFIX):
             continue
         if not sep or key in values or key[len(PREFIX):] not in DEFAULTS:
-            raise AssistantError("config_file", "助手 .env 键重复、未知或格式错误，请检查模板")
+            raise AssistantError("config_file", "Assistant .env keys are duplicated, unknown, or malformed; check the template")
         raw = raw.strip()
         try:
             if raw.startswith('"'):
@@ -53,26 +53,26 @@ def parse_dotenv(text: str) -> dict[str, str]:
             if "\n" in value or "\r" in value or "\x00" in value:
                 raise ValueError
         except (ValueError, json.JSONDecodeError):
-            raise AssistantError("config_file", "助手 .env 值格式错误；双引号使用 JSON 转义，不支持多行或变量展开") from None
+            raise AssistantError("config_file", "Assistant .env value is malformed; double quotes use JSON escaping, and multiline or variable expansion is not supported") from None
         values[key] = value
     return values
 
 
 def boolean(value: str) -> bool:
     if value.lower() not in ("true", "false"):
-        raise AssistantError("config_value", "助手布尔配置只能使用 true 或 false")
+        raise AssistantError("config_value", "Assistant boolean settings only accept true or false")
     return value.lower() == "true"
 
 
 def integer(value: str, low: int, high: int) -> int:
     if isinstance(value, bool) or not isinstance(value, (str, int)):
-        raise AssistantError("config_value", "助手数字配置必须是整数")
+        raise AssistantError("config_value", "Assistant numeric settings must be integers")
     try:
         number = int(value)
     except (ValueError, TypeError):
-        raise AssistantError("config_value", "助手数字配置无效") from None
+        raise AssistantError("config_value", "Invalid assistant numeric setting") from None
     if not low <= number <= high:
-        raise AssistantError("config_value", f"助手数字配置必须在 {low}–{high} 之间")
+        raise AssistantError("config_value", f"Assistant numeric settings must be between {low} and {high}")
     return number
 
 
@@ -103,26 +103,26 @@ class ConnectionConfig:
 def validate_connection(config: ConnectionConfig, *, required: bool = True) -> ConnectionConfig:
     if any(len(v) > limit or any(c in v for c in "\r\n\x00") for v, limit in
            ((config.base_url, 2048), (config.model, 256), (config.api_key, 8192))):
-        raise AssistantError("config_value", "连接配置过长或包含非法控制字符")
+        raise AssistantError("config_value", "Connection settings are too long or contain illegal control characters")
     try:
         url = urlsplit(config.base_url)
         url.port
     except ValueError:
-        raise AssistantError("base_url", "Base URL 无效") from None
+        raise AssistantError("base_url", "Invalid Base URL") from None
     if config.base_url and (url.scheme not in ("http", "https") or not url.hostname or url.username is not None
             or url.password is not None or url.query or url.fragment or "\\" in config.base_url
             or any(c.isspace() for c in config.base_url)):
-        raise AssistantError("base_url", "Base URL 只允许不含凭据、查询参数或片段的 HTTP(S) 接口根地址")
+        raise AssistantError("base_url", "Base URL must be an HTTP(S) API root without credentials, query parameters, or fragments")
     if url.path.rstrip("/").endswith(("/chat/completions", "/models")):
-        raise AssistantError("base_url", "请填写接口根地址（如 /v1），不要填写 /chat/completions 或 /models")
+        raise AssistantError("base_url", "Enter the API root (e.g. /v1), not /chat/completions or /models")
     if config.auth_mode not in ("bearer", "none"):
-        raise AssistantError("auth_mode", "鉴权方式必须为 bearer 或本地无 Key")
+        raise AssistantError("auth_mode", "Auth mode must be bearer or local keyless")
     if required and not config.configured:
-        raise AssistantError("not_configured", "请配置 Base URL、模型名称和 API Key；本机无鉴权服务需明确选择无需 Key")
+        raise AssistantError("not_configured", "Configure Base URL, model name, and API Key; for a local service without auth, explicitly choose keyless")
     if config.auth_mode == "none" and config.api_key:
-        raise AssistantError("auth_mode", "无需 Key 模式请明确清除 Key")
+        raise AssistantError("auth_mode", "In keyless mode, explicitly clear the Key")
     if config.max_output_tokens >= config.context_tokens:
-        raise AssistantError("context_budget", "输出 token 上限必须小于上下文窗口")
+        raise AssistantError("context_budget", "The output token limit must be smaller than the context window")
     return config
 
 
@@ -130,31 +130,31 @@ def from_payload(payload: dict, current: ConnectionConfig) -> ConnectionConfig:
     allowed = {"base_url", "model", "api_key", "secret_action", "auth_mode", "stream", "context_tokens",
         "max_output_tokens", "timeout_seconds", "scope"}
     if set(payload) - allowed:
-        raise AssistantError("config_value", "包含未知连接配置字段")
+        raise AssistantError("config_value", "Unknown connection setting fields")
     for key in ("base_url", "model", "auth_mode"):
         if not isinstance(payload.get(key), str):
-            raise AssistantError("config_value", "请完整填写 Base URL、模型名和鉴权方式")
+            raise AssistantError("config_value", "Fill in Base URL, model name, and auth mode completely")
     base_url = payload["base_url"].strip().rstrip("/")
     validate_connection(replace(current, base_url=base_url), required=False)
     action = payload.get("secret_action")
     if action == "replace":
         secret = payload.get("api_key")
         if not isinstance(secret, str) or not secret.strip():
-            raise AssistantError("config_value", "替换 Key 时请输入新的 API Key")
+            raise AssistantError("config_value", "Enter the new API Key when replacing the Key")
         secret = secret.strip()
     elif action == "clear":
         secret = ""
     elif action == "keep":
         if urlsplit(base_url).netloc.lower() != urlsplit(current.base_url).netloc.lower() or urlsplit(base_url).scheme != urlsplit(current.base_url).scheme:
-            raise AssistantError("key_origin", "更换服务 origin 后不能沿用原 Key，请重新输入或明确清除")
+            raise AssistantError("key_origin", "After changing the service origin the old Key cannot be reused; re-enter it or explicitly clear it")
         secret = current.api_key
     else:
-        raise AssistantError("config_value", "请明确选择保留、替换或清除 Key")
+        raise AssistantError("config_value", "Explicitly choose to keep, replace, or clear the Key")
     if action != "replace" and "api_key" in payload:
-        raise AssistantError("config_value", "仅替换操作可以携带 Key")
+        raise AssistantError("config_value", "Only the replace action may carry a Key")
     stream = payload.get("stream", current.stream)
     if not isinstance(stream, bool):
-        raise AssistantError("config_value", "stream 必须是布尔值")
+        raise AssistantError("config_value", "stream must be a boolean")
     config = replace(current, base_url=base_url, model=payload["model"].strip(), api_key=secret,
         auth_mode=payload["auth_mode"], stream=stream, source="session",
         context_tokens=integer(payload.get("context_tokens", current.context_tokens), 256, 1048576),
@@ -187,7 +187,7 @@ class ConfigStore:
         try:
             text = self.path.read_text(encoding="utf-8-sig") if self.path.is_file() else ""
         except (OSError, UnicodeError):
-            raise AssistantError("config_file", "无法读取助手 .env；业务功能不受影响") from None
+            raise AssistantError("config_file", "Cannot read the assistant .env; core features are unaffected") from None
         self.file_values = parse_dotenv(text)
         values = {PREFIX + k: v for k, v in DEFAULTS.items()}
         values.update(self.file_values)
@@ -202,7 +202,7 @@ class ConfigStore:
 
     def persist(self, config: ConnectionConfig) -> ConnectionConfig:
         if not self.allow_persist:
-            raise AssistantError("persistence_disabled", "管理员未开启本机 .env 保存；可使用本次会话配置", 403)
+            raise AssistantError("persistence_disabled", "The administrator has not enabled local .env saving; use the session configuration instead", 403)
         with self.lock:
             path = None
             try:
@@ -226,7 +226,7 @@ class ConfigStore:
                 self.reload()
                 return self.default
             except (OSError, subprocess.SubprocessError):
-                raise AssistantError("config_write", "无法安全保存 .env，请检查权限/空间；原配置保留，可继续临时模式") from None
+                raise AssistantError("config_write", "Cannot safely save .env; check permissions/disk space. The previous configuration is kept and session mode still works") from None
             finally:
                 if path is not None:
                     path.unlink(missing_ok=True)

@@ -44,7 +44,7 @@ class BuildManager:
         from ..storage import remove_failed
         with self._lock:
             if any(not b["finished"] for b in self._builds.values()) or any(p.poll() is None for p in self._servers.values()):
-                raise ValueError("请先等待转换完成并停止模型服务，再清理失败产物")
+                raise ValueError("Wait for the conversion to finish and stop the model server before cleaning failed artifacts")
             return remove_failed(cache_root(), identifiers)
 
     def start(self, config: ForgeConfig | None, *, model: str | None = None, options: dict | None = None) -> str:
@@ -61,9 +61,9 @@ class BuildManager:
         }
         with self._lock:
             if any(not b["finished"] for b in self._builds.values()):
-                raise RuntimeError("已有构建正在执行，请等待完成")
+                raise RuntimeError("A build is already running; wait for it to finish")
             if any(p.poll() is None for p in self._servers.values()):
-                raise RuntimeError("请先停止本页面启动的模型服务，释放 GPU 后再转换")
+                raise RuntimeError("Stop the model server started from this page to free the GPU before converting")
             self._builds[build_id] = record
 
         try:
@@ -71,7 +71,7 @@ class BuildManager:
         except OSError as exc:
             with self._lock:
                 self._builds.pop(build_id, None)
-            raise RuntimeError("无法写入任务记录，请检查缓存盘空间和目录权限") from exc
+            raise RuntimeError("Cannot write the build record; check cache disk space and directory permissions") from exc
 
         def work() -> None:
             try:
@@ -110,7 +110,7 @@ class BuildManager:
         worker = root / ("worker-env-py31318" if os.name == "nt" else "worker-env")
         python = worker / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
         if not python.is_file():
-            emit("自动创建专用转换环境，不改动系统 Python 包")
+            emit("Creating a dedicated conversion environment automatically; system Python packages are not modified")
             from ..bootstrap import run
             from ..backends.hf_environment import bootstrap_python
             run([str(bootstrap_python(root,emit)), "-m", "venv", str(worker)], emit)
@@ -133,7 +133,7 @@ class BuildManager:
                 code = process.wait()
         outcome = read_json_atomic(result) if result.is_file() else {}
         if code or "error" in outcome:
-            raise RuntimeError(outcome.get("error", f"自动准备进程退出 {code}，请查看准备日志"))
+            raise RuntimeError(outcome.get("error", f"The automatic preparation process exited with {code}; check the preparation log"))
         with self._lock:
             record["status"] = outcome["status"]
             record["output_dir"] = outcome["output_dir"]
@@ -142,10 +142,10 @@ class BuildManager:
         from ..runner import DEFAULT_NINFER_BIN
         record = self.status(build_id)
         if not record or not record["finished"] or record["status"] != "validated":
-            raise RuntimeError("仅可启动已通过 GPU 验证的本次构建")
+            raise RuntimeError("Only builds that passed GPU validation can be started")
         manifest = record["manifest"]
         if not manifest or manifest.get("status") != "validated":
-            raise RuntimeError("构建记录缺失或未完成，请检查输出目录并重新构建")
+            raise RuntimeError("The build record is missing or incomplete; check the output directory and rebuild")
         config = manifest["config"]
         profile = manifest["plan"]["serving"]
         port = profile["port"]
@@ -160,7 +160,7 @@ class BuildManager:
             if not Path(artifact).is_absolute():
                 artifact = str(Path(record["output_dir"]) / artifact)
             if not Path(artifact).is_file():
-                raise RuntimeError("模型产物已被移动或删除，请重新构建")
+                raise RuntimeError("The model artifact was moved or deleted; rebuild")
             retained=next((step.get("details",{}).get("components","") for step in manifest.get("plan",{}).get("steps",[]) if step.get("name") == "quantize+compile"),"")
             expected=[name for name in ("mtp","dflash2") if name in (retained or "").split(",") or profile.get("spec") == name]
             if expected:
@@ -173,14 +173,14 @@ class BuildManager:
             command += [part for flag in profile["launcher_flags"] for part in shlex.split(flag)]
         with self._lock:
             if any(not build["finished"] for build in self._builds.values()):
-                raise RuntimeError("转换任务正在执行，请等待完成后再启动模型服务")
+                raise RuntimeError("A conversion is running; wait for it to finish before starting the model server")
             if any(p.poll() is None for p in self._servers.values()):
-                raise RuntimeError("本页面已有模型服务运行，请先停止")
+                raise RuntimeError("A model server from this page is already running; stop it first")
             with socket.socket() as sock:
                 try:
                     sock.bind(("127.0.0.1", port))
                 except OSError as exc:
-                    raise RuntimeError(f"端口 {port} 已被占用，请停止占用服务或更换服务端口后重新构建") from exc
+                    raise RuntimeError(f"Port {port} is in use; stop the occupying service or change the serving port and rebuild") from exc
             if self._server_job is None:
                 from ..process_owner import ServerJob
                 self._server_job = ServerJob()
@@ -284,14 +284,14 @@ class BuildManager:
                     return None
                 outcome = read_json_atomic(legacy)
                 if not isinstance(outcome,dict) or not ("error" in outcome or isinstance(outcome.get("status"),str) and isinstance(outcome.get("output_dir"),str)):
-                    raise ValueError("旧任务记录结构不完整")
+                    raise ValueError("The legacy build record is incomplete")
                 record = {"build_id":build_id,"finished":True,"status":outcome.get("status","crashed"),"output_dir":outcome.get("output_dir",""),"setup_log":[],"error":outcome.get("error")}
             if not isinstance(record,dict) or record.get("build_id") != build_id or type(record.get("finished")) is not bool or not isinstance(record.get("output_dir"),str) or not isinstance(record.get("status"),str):
-                raise ValueError("任务记录结构不完整")
+                raise ValueError("The build record is incomplete")
         except (OSError, ValueError) as exc:
-            record = {"build_id":build_id,"finished":True,"status":"crashed","output_dir":"","setup_log":[],"error":f"任务记录无法读取，请重新开始：{exc}"}
+            record = {"build_id":build_id,"finished":True,"status":"crashed","output_dir":"","setup_log":[],"error":f"The build record cannot be read; start over: {exc}"}
         if not record["finished"]:
-            record.update(finished=True, status="interrupted", error="上次本机服务在任务结束前关闭。请查看日志，重新开始会复用下载缓存。")
+            record.update(finished=True, status="interrupted", error="The previous local service closed before the build finished. Check the logs; restarting reuses the download cache.")
         with self._lock:
             self._builds[build_id] = record
         return dict(record)

@@ -81,10 +81,10 @@ def probe_upstream(root: Path | None = None) -> UpstreamStatus:
                 pass  # Official source archives carry their pinned revision marker.
             else:
                 diagnostics.append(Diagnostic(
-                    "upstream-revision-unknown", "无法确认转换器源码版本", Severity.WARNING,
+                    "upstream-revision-unknown", "Cannot confirm the converter source revision", Severity.WARNING,
                 ))
     if revision and not matches and not any(d.code == "upstream-revision-differs" for d in diagnostics):
-        diagnostics.append(Diagnostic("upstream-revision-differs", f"当前自动安装源码 {revision[:12]} 与原配方核对版本不同；将由真实转换与 GPU 验证确认结果", Severity.WARNING))
+        diagnostics.append(Diagnostic("upstream-revision-differs", f"The auto-installed source {revision[:12]} differs from the revision the recipes were verified against; the actual conversion and GPU validation will confirm the result", Severity.WARNING))
     import importlib.util
     torch_ok = importlib.util.find_spec("torch") is not None
     numpy_available = importlib.util.find_spec("numpy") is not None
@@ -127,7 +127,7 @@ class NInferCompiler:
         sources = sources or {}
         if isinstance(recipe, RecipeSpec):
             if recipe.engine != "ninfer":
-                raise ValueError("AWQ/GPTQ 原生路线由 HF worker 执行，不能交给 NInfer 转换器")
+                raise ValueError("The AWQ/GPTQ native route runs in the HF worker; it cannot be handed to the NInfer converter")
             missing = [s for s in recipe.extra_sources if s not in sources]
             if missing:
                 raise ValueError(

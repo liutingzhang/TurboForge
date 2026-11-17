@@ -24,7 +24,7 @@ def copy_companions(source: Path, destination: Path) -> None:
         for path in origin.rglob("*"):
             if not path.is_file() or (path.suffix != ".safetensors" and path.name not in MODEL_RESOURCE_FILES and not path.name.endswith(".safetensors.index.json")):
                 continue
-            if origin not in path.resolve().parents: raise ValueError("组件链接指向来源目录之外")
+            if origin not in path.resolve().parents: raise ValueError("A component link points outside the source directory")
             target=destination/component/path.relative_to(origin)
             target.parent.mkdir(parents=True,exist_ok=True)
             if not target.exists(): shutil.copy2(path,target)
@@ -47,12 +47,12 @@ def companions(directory: Path) -> dict[str,str]:
                 continue
             config = json.loads((path/"config.json").read_text(encoding="utf-8-sig"))
             if component == "dflash2" and config.get("architectures") != ["DFlash2DraftModel"]:
-                raise ValueError(f"{path}: DFlash2 目录缺少明确的 DFlash2DraftModel 配置")
+                raise ValueError(f"{path}: the DFlash2 directory lacks an explicit DFlash2DraftModel configuration")
             if component == "mtp" and not any(component_name(t.name) for file in path.glob("*.safetensors") for t in read_tensor_summaries(file)[0]):
-                raise ValueError(f"{path}: MTP 目录没有实际 MTP 张量")
+                raise ValueError(f"{path}: the MTP directory has no actual MTP tensors")
             candidates.append(path.resolve())
         if len(candidates) > 1:
-            raise ValueError(f"{component.upper()} 存在多个自带来源，请明确指定，不会随意选取")
+            raise ValueError(f"{component.upper()} has multiple bundled sources; specify one explicitly, none is picked arbitrarily")
         if candidates:
             found[component] = str(candidates[0])
     return found
@@ -70,7 +70,7 @@ def tensors(directory: Path) -> dict:
             if name == "__metadata__":
                 continue
             if name in result:
-                raise ValueError("重复来源张量："+name)
+                raise ValueError("Duplicate source tensor: "+name)
             result[name] = {"file":path,"dtype":value["dtype"],"shape":value["shape"],
                             "offset":8+length+value["data_offsets"][0],"bytes":value["data_offsets"][1]-value["data_offsets"][0]}
     return result
@@ -84,7 +84,7 @@ def _hash_tensor(item: dict) -> str:
         while remaining:
             block = stream.read(min(remaining,4*1024**2))
             if not block:
-                raise ValueError("组件张量被截断")
+                raise ValueError("Component tensor is truncated")
             digest.update(block);remaining-=len(block)
     return digest.hexdigest()
 
@@ -106,7 +106,7 @@ def write_tensors(destination: Path, selected: dict) -> None:
                 source.seek(item["offset"])
                 while remaining:
                     block=source.read(min(remaining,4*1024**2))
-                    if not block: raise ValueError("组件来源被截断")
+                    if not block: raise ValueError("Component source is truncated")
                     output.write(block);remaining-=len(block)
     pending.replace(destination)
 
@@ -132,14 +132,14 @@ def prepare_sources(directory: Path, supplied: dict[str,str], work: Path) -> dic
         if component == "dflash2":
             config = json.loads((origin/"config.json").read_text(encoding="utf-8-sig")).get("dflash2_config")
             if not isinstance(config,dict) or config.get("architectures") != ["DFlash2DraftModel"]:
-                raise ValueError("内嵌 DFlash2 张量缺少 dflash2_config，不能猜测其配置")
+                raise ValueError("Embedded DFlash2 tensors lack dflash2_config; its configuration cannot be guessed")
         else:
             config = json.loads((origin/"config.json").read_text(encoding="utf-8-sig"))
         canonical = {}
         for name,item in selected.items():
             renamed=component_name(name)[1]
             if component == "dflash2": renamed=renamed[len("dflash2."):]
-            if renamed in canonical: raise ValueError("组件名称规范化发生冲突："+renamed)
+            if renamed in canonical: raise ValueError("Component name normalization conflict: "+renamed)
             canonical[renamed]=item
         write_tensors(target/"model.safetensors",canonical)
         write_json_atomic(target/"config.json",config)
@@ -153,7 +153,7 @@ def preserve_hf(directory: Path, checkpoint: Path) -> dict:
     if "mtp" in bundled:
         for name,item in tensors(Path(bundled["mtp"])).items():
             if component_name(name) and component_name(name)[0] == "mtp":
-                if name in original: raise ValueError("MTP 有多个来源，不能无声覆盖")
+                if name in original: raise ValueError("MTP has multiple sources; silent overwrite is not allowed")
                 original[name]=item
     missing,record = {},{}
     for name,item in original.items():
@@ -163,13 +163,13 @@ def preserve_hf(directory: Path, checkpoint: Path) -> dict:
         if name in exported:
             other=exported[name]
             if (item["shape"],item["dtype"],digest) != (other["shape"],other["dtype"],_hash_tensor(other)):
-                raise ValueError("量化改动了应保留的推测头："+name)
+                raise ValueError("Quantization modified a speculative head that must be retained: "+name)
         else:
             missing[name]=item
         record[name]={"component":component[0],"dtype":item["dtype"],"shape":item["shape"],"sha256":digest}
     if missing:
         shard=checkpoint/"speculative-preserved.safetensors"
-        if shard.exists(): raise ValueError("推测头保留文件已存在，拒绝覆盖")
+        if shard.exists(): raise ValueError("The speculative-head retention file already exists; overwrite refused")
         write_tensors(shard,missing)
     existing_index=checkpoint/"model.safetensors.index.json"
     mapped=json.loads(existing_index.read_text(encoding="utf-8")).get("weight_map",{}) if existing_index.is_file() else {
@@ -185,10 +185,10 @@ def preserve_hf(directory: Path, checkpoint: Path) -> dict:
         for file in origin.rglob("*"):
             if not file.is_file() or (file.suffix != ".safetensors" and file.name not in MODEL_RESOURCE_FILES and not file.name.endswith(".safetensors.index.json")):
                 continue
-            if origin not in file.resolve().parents: raise ValueError("组件目录链接指向模型之外")
+            if origin not in file.resolve().parents: raise ValueError("A component directory link points outside the model")
             relative=file.relative_to(origin)
             destination=target/relative;destination.parent.mkdir(parents=True,exist_ok=True)
-            if destination.exists() and file_sha256(destination) != file_sha256(file): raise ValueError("组件文件冲突："+str(relative))
+            if destination.exists() and file_sha256(destination) != file_sha256(file): raise ValueError("Component file conflict: "+str(relative))
             if not destination.exists(): shutil.copy2(file,destination)
             sidecars[destination.relative_to(checkpoint).as_posix()]=file_sha256(file)
     source_config=json.loads((directory/"config.json").read_text(encoding="utf-8-sig"))
@@ -209,10 +209,10 @@ def preserve_hf(directory: Path, checkpoint: Path) -> dict:
 def verify_ninfer(path: Path, expected: list[str]) -> dict:
     with path.open("rb") as stream:
         raw=stream.read(32)
-        if len(raw) != 32: raise ValueError("NInfer 组件审计：文件头不完整")
+        if len(raw) != 32: raise ValueError("NInfer component audit: incomplete file header")
         magic,length,artifact_id=struct.unpack("<8sQ16s",raw)
         if magic != b"NINFER\x00\x03" or not 0 < length <= min(path.stat().st_size-32,256*1024**2):
-            raise ValueError("NInfer 组件审计：目录格式或长度无效")
+            raise ValueError("NInfer component audit: invalid directory format or length")
         directory=json.loads(stream.read(length))
     components=directory["components"];bindings=directory["bindings"]
     objects={item["id"]:item for item in directory["objects"]}
@@ -220,19 +220,19 @@ def verify_ninfer(path: Path, expected: list[str]) -> dict:
     total_payload=sum(item["payload_bytes"] for item in files)
     for index,item in enumerate(files):
         file=path if index == 0 else (path.parent/item["path"]).resolve()
-        if index and path.parent.resolve() not in file.parents: raise ValueError("组件续卷路径越界")
+        if index and path.parent.resolve() not in file.parents: raise ValueError("Component continuation volume path escapes the boundary")
         framing=((32+length+4095)//4096)*4096 if index == 0 else 4096
         if not file.is_file() or file.stat().st_size != framing+item["payload_bytes"]:
-            raise ValueError("推测组件产物/续卷不完整")
+            raise ValueError("Speculative component artifact/continuation volume is incomplete")
         if index:
             with file.open("rb") as stream: header=stream.read(32)
             if len(header) != 32 or struct.unpack("<8sQ16s",header) != (b"NINPRT\x00\x03",index,artifact_id):
-                raise ValueError("推测组件续卷不属于当前产物")
+                raise ValueError("The speculative component continuation volume does not belong to this artifact")
     result={}
     for component in expected:
-        if component not in components: raise ValueError("转换丢失组件："+component)
+        if component not in components: raise ValueError("Conversion dropped component: "+component)
         names=[name for name in bindings if name.startswith(component+"/")]
-        if not names: raise ValueError("组件只有声明，没有实际权重绑定："+component)
+        if not names: raise ValueError("Component is declared but has no actual weight bindings: "+component)
         config=components[component].get("config",{})
         architectures=config.get("architectures",[])
         output_head="mtp/output_head" if component == "mtp" and "Gemma4AssistantForCausalLM" in architectures else "text/output_head"
@@ -244,34 +244,34 @@ def verify_ninfer(path: Path, expected: list[str]) -> dict:
                 required += ["mtp/layers/0/mlp/"+name for name in ("gate","up","down")]
         if component == "dflash2":
             layers=config.get("num_hidden_layers")
-            if type(layers) is not int or layers < 1: raise ValueError("DFlash2 缺少有效层数")
+            if type(layers) is not int or layers < 1: raise ValueError("DFlash2 lacks a valid layer count")
             required=["dflash2/"+name for name in ("feature_projection","context_norm","final_norm")]
             for layer in range(layers):
                 prefix=f"dflash2/layers/{layer}/"
                 required += [prefix+name for name in ("input_norm","post_attention_norm","attention/query","attention/key","attention/value","attention/output","attention/query_norm","attention/key_norm","attention/context_key","attention/context_value","mlp/gate","mlp/up","mlp/down","attention_conv/base_kernel","attention_conv/kernel_projection","mlp_conv/base_kernel","mlp_conv/kernel_projection")]
         if any(name not in bindings for name in required):
-            raise ValueError("推测头缺少权重："+", ".join(name for name in required if name not in bindings))
+            raise ValueError("Speculative head is missing weights: "+", ".join(name for name in required if name not in bindings))
         for name in names+[output_head]:
-            if name not in bindings: raise ValueError("缺少共享输出头："+name)
+            if name not in bindings: raise ValueError("Missing shared output head: "+name)
             binding=bindings[name]
             refs=binding.get("parts",[binding])
-            if not refs or any(ref.get("object") not in objects for ref in refs): raise ValueError("组件权重绑定无效："+name)
+            if not refs or any(ref.get("object") not in objects for ref in refs): raise ValueError("Invalid component weight binding: "+name)
             for ref in refs:
                 obj=objects[ref["object"]]
                 if obj["kind"] != "tensor" or obj["bytes"] <= 0 or not 0 <= obj["offset"] <= total_payload-obj["bytes"]:
-                    raise ValueError("推测组件权重数据范围无效："+name)
+                    raise ValueError("Invalid speculative component weight data range: "+name)
         if not any(use.get("input") == component+"/final_hidden" and use.get("parameter") == output_head for use in directory["uses"]):
-            raise ValueError("推测头未连接共享输出投影："+component)
+            raise ValueError("Speculative head is not connected to the shared output projection: "+component)
         if component == "dflash2":
             for suffix in ("hidden_projection","predecessor_codebook","successor_codebook"):
                 name=component+"/candidate_selector/"+suffix
-                if name not in bindings: raise ValueError("DFlash2 缺少 selector 权重："+suffix)
+                if name not in bindings: raise ValueError("DFlash2 is missing selector weight: "+suffix)
             for name in names:
                 if name.endswith(("/attention_conv/kernel_projection","/mlp_conv/kernel_projection","/candidate_selector/hidden_projection","/candidate_selector/predecessor_codebook","/candidate_selector/successor_codebook")):
                     refs=bindings[name].get("parts",[bindings[name]])
-                    if any(objects[ref["object"]]["format"] != "bf16" for ref in refs): raise ValueError("DFlash2 控制投影/码本未保留 BF16："+name)
+                    if any(objects[ref["object"]]["format"] != "bf16" for ref in refs): raise ValueError("DFlash2 control projection/codebook did not retain BF16: "+name)
         if not any("/attention/" in name for name in names) or not any("/mlp/" in name or "/moe/" in name for name in names):
-            raise ValueError("推测头缺少完整 attention/MLP 权重："+component)
+            raise ValueError("Speculative head lacks complete attention/MLP weights: "+component)
         result[component]={"retained":True,"binding_count":len(names),"output_head_connected":True,"shared_output_connected":output_head == "text/output_head",
                            "runtime_geometry":"converter_checked; engine validation tracked separately","speedup":"not_inferred_from_presence"}
     return result

@@ -12,8 +12,8 @@ from turboforge.distribution import private_path
 
 
 def verify(path: Path) -> dict:
-    required = {"README.md", "README_EN.md", "LICENSE", "NOTICE",
-                "requirements-web.txt", "pyproject.toml", ".env.example", "启动 TurboForge.bat",
+    required = {"README.md", "LICENSE", "NOTICE",
+                "requirements-web.txt", "pyproject.toml", ".env.example", "Start TurboForge.bat",
                 "scripts/start_web.py", "scripts/start_web.ps1",
                 "src/turboforge/data/python-runtime.json", "src/turboforge/data/ensure_python.ps1",
                 "web/package-lock.json", "web/src/App.tsx", "web/dist/index.html", "web/dist/build-receipt.json",

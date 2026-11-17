@@ -26,35 +26,35 @@ def test_knowledge_matches_every_code_and_all_faq():
     assert json.loads(DEST.read_text(encoding="utf-8")) == compile_entries()
     index = KnowledgeIndex()
     assert len([k for k in index.by_id if len(k) == 3 and k[0] in "ABCDEFGHIJKL"]) == 131
-    assert index.search("为什么报错 packed-needs-hf")[0]["id"] == "packed-needs-hf"
-    assert index.search("AWQ 跟普通 Q4 一样吗")[0]["id"] == "C05"
-    assert index.search("PPL 增幅怎么计算")[0]["id"] == "H02"
+    assert index.search("why does packed-needs-hf error")[0]["id"] == "packed-needs-hf"
+    assert index.search("Is AWQ the same as ordinary Q4")[0]["id"] == "C05"
+    assert index.search("How is the PPL increase computed")[0]["id"] == "H02"
 
 
 @pytest.mark.parametrize("question,expected", [
-    ("量化后MTP还能用吗", {"F03", "F04"}),
-    ("GPTQ默认用什么后端", {"capability.hf_backend"}),
-    ("Qwen3.5可以做AWQ吗", {"capability.awq_restrictions"}),
-    ("为什么模型量化后变笨了", {"H01", "H02", "H03", "H04"}),
-    ("4bit是不是一定更快", {"C04", "I01", "I02"}),
-    ("校准文本只有一小段够吗", {"runtime.hf.calibration"}),
-    ("MTP头还在为什么速度没提升", {"F03"}),
-    ("没网络还能启动吗", {"capability.offline_start"}),
-    ("本机模型路径没问题却提示找不到config.json", {"capability.local_model_input"}),
-    ("空白环境只下一个gguf，原始模型目录从哪里来", {"capability.clean_gguf"}),
-    ("什么是MoE混合专家架构", {"B11"}),
-    ("50系显卡为什么推荐NVFP4", {"C11"}),
-    ("我的显卡支持原生FP4吗", {"C11"}),
-    ("方案按什么排序，推荐是怎么来的", {"C11"}),
-    ("MoE模型产出后按显卡推荐哪个推理引擎", {"B12"}),
-    ("Strata和Basalt有什么区别", {"C12"}),
-    ("Basalt只支持Blackwell显卡吗", {"C13"}),
-    ("Strata支持哪些显卡和内存档位", {"C14"}),
-    ("MoE引擎推荐显存内存够吗", {"D11"}),
-    ("产出的ninfer能用Strata或Basalt跑吗", {"J11"}),
-    ("50系显卡用Basalt跑MoE的完整步骤", {"J12"}),
-    ("非50系显卡用Strata跑MoE的完整步骤", {"J13"}),
-    ("Dense模型用ninfer加kvmem跑起来的步骤", {"J14"}),
+    ("Can MTP still be used after quantization", {"F03", "F04"}),
+    ("Which backend does GPTQ use by default", {"capability.hf_backend"}),
+    ("Can Qwen3.5 do AWQ", {"capability.awq_restrictions"}),
+    ("Why is the model dumber after quantization", {"H01", "H02", "H03", "H04"}),
+    ("Is 4-bit always faster", {"C04", "I01", "I02"}),
+    ("Is a short calibration text enough", {"runtime.hf.calibration"}),
+    ("MTP head is still there but no speedup", {"F03"}),
+    ("Can it start without a network", {"capability.offline_start"}),
+    ("local model path is fine but config.json not found", {"capability.local_model_input"}),
+    ("clean machine with only one gguf where does the original model directory come from", {"capability.clean_gguf"}),
+    ("How are MoE and Dense architectures identified", {"B11"}),
+    ("Why is NVFP4 recommended on RTX 50", {"C11"}),
+    ("Does my GPU support native FP4", {"C11"}),
+    ("How are plans ranked and where does the recommendation come from", {"C11"}),
+    ("Which inference engine is recommended after a MoE model is produced", {"B12"}),
+    ("What is the difference between Strata and Basalt", {"C12"}),
+    ("Does Basalt only support Blackwell GPUs", {"C13"}),
+    ("Which GPUs and RAM tiers does Strata support", {"C14"}),
+    ("Is a 12GB Blackwell enough for the MoE engine recommendation", {"D11"}),
+    ("Can the produced .ninfer run in Strata or Basalt", {"J11"}),
+    ("Complete steps to run MoE with Basalt on an RTX 50 card", {"J12"}),
+    ("Strata complete plain-language steps non-RTX-50 card Qwen3.6-35B-A3B", {"J13"}),
+    ("Steps to run a Dense model with ninfer and kvmem", {"J14"}),
 
 ])
 def test_natural_questions_retrieve_relevant_help_first(question, expected):
@@ -63,7 +63,7 @@ def test_natural_questions_retrieve_relevant_help_first(question, expected):
 
 
 def test_unrelated_question_does_not_offer_generic_help():
-    assert KnowledgeIndex().search("今天天气怎么样") == []
+    assert KnowledgeIndex().search("Whats the weather today") == []
 
 
 def test_streaming_redacts_split_credentials_without_delaying_chinese():

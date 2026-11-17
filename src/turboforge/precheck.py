@@ -30,11 +30,11 @@ from .system import detect_gpu
 
 
 SOURCE_FIELDS = {
-    "quantized": {"label":"NVFP4 量化检查点", "kind":"directory"},
-    "gguf": {"label":"GGUF 权重", "kind":"file"},
-    "ternary": {"label":"PQ2_0 三值 GGUF", "kind":"file"},
-    "imatrix": {"label":"重要性矩阵（imatrix）", "kind":"file"},
-    "engram": {"label":"Engram 表 GGUF", "kind":"file"},
+    "quantized": {"label":"NVFP4 quantized checkpoint", "kind":"directory"},
+    "gguf": {"label":"GGUF weights", "kind":"file"},
+    "ternary": {"label":"PQ2_0 ternary GGUF", "kind":"file"},
+    "imatrix": {"label":"Importance matrix (imatrix)", "kind":"file"},
+    "engram": {"label":"Engram table GGUF", "kind":"file"},
 }
 
 
@@ -54,34 +54,34 @@ _BASALT_COMPUTE_CAP = 12.0
 # even on RTX 50. An MoE config outside both lists gets no engine promise.
 _BASALT_MOE_ARCHITECTURES = frozenset((*FLASH_NEXT, *DEEPSEEK_V41))
 _STRATA_MOE_ARCHITECTURES = frozenset((*FLASH_NEXT, *DEEPSEEK_V41, *QWEN35_MOE))
-_MOE_ENGINE_ADVISORY = ("选型建议，不集成引擎；TurboForge 产出 .ninfer 供配套 NInfer 引擎，"
-                        "Strata 用 GGUF、Basalt 用 .basalt，需各自来源/转换，不能直接互喂。")
+_MOE_ENGINE_ADVISORY = ("Engine-selection advice only, no engine integration; TurboForge produces .ninfer for the companion NInfer engine, "
+                        "Strata uses GGUF and Basalt uses .basalt; each needs its own source/conversion and they cannot be fed to each other directly.")
 _BASALT_URL = "https://github.com/jesdga95/basalt"
 _STRATA_URL = "https://github.com/Niko1221/Strata"
 # fusion-kvmem publishes an Apache-2.0 license and Windows sm_120/89/86 builds.
 # ninfer-kvmem-actkv has no LICENSE file, so it is not offered.
 _FUSION_URL = "https://github.com/1314521gjy/ninfer-fusion-kvmem"
-_AGENT_BAT = ("给助手的硬性顺序：先用两句独立问题询问用户「上下文长度（token 正整数）」和「同时请求数（并发，正整数）」，"
-               "得到数字前不要写启动脚本，也不要替用户假设。回答后只生成一个 ASCII 文件名的 .bat，"
-               "只用 cmd.exe：首行 @echo off，接着 chcp 65001、setlocal EnableExtensions、cd /d \"%~dp0\"；"
-               "所有路径加引号；每个失败分支都 echo 原因后 pause，再 exit /b 1；引擎命令结束后也 pause，"
-               "避免 Win10/Win11 双击闪退。不要用 PowerShell 语法、不要用未在对应条目核对过的参数。")
-_BASALT_STEPS = (_AGENT_BAT + "帮助中心搜 J12。已核对：basalt serve --config <json>，上下文用命令行 --max-context；"
-                 "发布包不含 CUDA 13 与 Python，需自备。并发没有已核对的配置字段，问到后若大于 1，"
-                 "必须告诉用户本次按单请求启动，不能把并发写进未核对字段。")
-_STRATA_STEPS = (_AGENT_BAT + "帮助中心搜 J13。已核对的只有 strata launch、--family、--model、--plan；"
-                 "没有核对 --context 或并发旗标。问到两个数字后，若引擎 --help 没有对应旗标，"
-                 "bat 只使用已核对旗标，并明确写出未传入的上下文和并发，不能发明参数。")
-_FUSION_STEPS = (_AGENT_BAT + "帮助中心搜 J14，条目内含完整命令与排错。"
-                 "概要：① Releases 选 engine-v0.11.0-kvmem-20261008，RTX 50 下 ninfer-serve-120a.exe、"
-                 "40 系 -89、30 系 -86，并核对 SHA256；② 把本页产出的 .ninfer 和引擎放英文路径；"
-                 "③ 按文档设 KV 环境变量后启动，12GB 卡先用文档里的 --kv-capacity；"
-                 "④ 另开终端访问 /v1/models 并让它回答一道算术题。该仓库 Apache-2.0；"
-                 "无许可证的 melis2023/ninfer-kvmem-actkv 不推荐。")
+_AGENT_BAT = ("Hard ordering for the assistant: first ask the user two separate questions, 'context length (positive integer of tokens)' and 'simultaneous requests (concurrency, positive integer)'; "
+               "do not write the launcher script before getting the numbers, and do not assume them for the user. After the answers, generate exactly one .bat with an ASCII file name, "
+               "using cmd.exe only: first line @echo off, then chcp 65001, setlocal EnableExtensions, cd /d \"%~dp0\"; "
+               "quote every path; every failure branch echoes the reason, then pause, then exit /b 1; also pause after the engine command finishes, "
+               "to avoid the double-click window closing instantly on Win10/Win11. Do not use PowerShell syntax or parameters not verified in the corresponding entry.")
+_BASALT_STEPS = (_AGENT_BAT + "Search J12 in the help center. Verified: basalt serve --config <json>; context goes through the command-line --max-context; "
+                 "the release package contains neither CUDA 13 nor Python; provide them yourself. Concurrency has no verified config field; if the answer is greater than 1, "
+                 "you must tell the user this run starts with a single request; never write concurrency into an unverified field.")
+_STRATA_STEPS = (_AGENT_BAT + "Search J13 in the help center. The only verified items are strata launch, --family, --model, --plan; "
+                 "no --context or concurrency flag has been verified. After getting the two numbers, if the engine --help has no matching flag, "
+                 "the bat uses only verified flags and explicitly states the context and concurrency that were not passed; never invent parameters.")
+_FUSION_STEPS = (_AGENT_BAT + "Search J14 in the help center; the entry contains the full commands and troubleshooting. "
+                 "Summary: (1) In Releases pick engine-v0.11.0-kvmem-20261008; on RTX 50 use ninfer-serve-120a.exe, "
+                 "40 series -89, 30 series -86, and verify SHA256; (2) put the .ninfer produced on this page and the engine on an English path; "
+                 "(3) set the KV environment variables per the docs then launch; on a 12GB card start with the documented --kv-capacity; "
+                 "(4) open another terminal, visit /v1/models and have it answer an arithmetic question. That repository is Apache-2.0; "
+                 "the unlicensed melis2023/ninfer-kvmem-actkv is not recommended.")
 # Shown up front for an RTX 50 card whose MoE is NOT in Basalt's adapted list.
-_BASALT_FASTER_UNADAPTED = ("Basalt 在 RTX 50（sm_120）上通常更快，但本模型不在它已发布的 MoE 列表"
-                            "（仅 Qwen3.8-Flash-Next、DeepSeek-V4.1-Flash）。"
-                            "请自行核对有没有兼容的 .basalt；没有就用下面的默认引擎。")
+_BASALT_FASTER_UNADAPTED = ("Basalt is usually faster on RTX 50 (sm_120), but this model is not in its published MoE list "
+                            "(only Qwen3.8-Flash-Next and DeepSeek-V4.1-Flash). "
+                            "Check yourself whether a compatible .basalt exists; if not, use the default engine below.")
 
 
 def _moe_engine_recommendation(config: dict, gpu: dict | None) -> dict | None:
@@ -95,11 +95,11 @@ def _moe_engine_recommendation(config: dict, gpu: dict | None) -> dict | None:
     if rtx50 and in_basalt:
         return {
             "engine": "basalt", "label": "Basalt",
-            "reason": f"本卡 {gpu['generation']}（compute {cap:g}）是消费级 Blackwell sm_120，且该 MoE 在 Basalt 已发布列表内，官方口径原生 NVFP4、在 RTX 50 上更快",
-            "requirements": "NVIDIA RTX 50（sm_120）+ CUDA 13 + 驱动 R580+；Linux x64 或 Win10 1903+ x64；release 包不含 CUDA/Python，需自备；放不下的专家进系统内存/SSD",
-            "format": ".basalt（v2，自包含：权重/分词器/MTP/视觉投影）",
-            "models": "Qwen3.8-Flash-Next、DeepSeek-V4.1-Flash",
-            "alternative": "Strata 也支持本卡与该模型，格式是 GGUF，可作跨平台备选",
+            "reason": f"This card {gpu['generation']} (compute {cap:g}) is consumer Blackwell sm_120, and this MoE is in Basalt's published list; officially native NVFP4 and faster on RTX 50",
+            "requirements": "NVIDIA RTX 50 (sm_120) + CUDA 13 + driver R580+; Linux x64 or Win10 1903+ x64; the release package contains no CUDA/Python, provide them yourself; experts that do not fit go to system RAM/SSD",
+            "format": ".basalt (v2, self-contained: weights/tokenizer/MTP/vision projection)",
+            "models": "Qwen3.8-Flash-Next, DeepSeek-V4.1-Flash",
+            "alternative": "Strata also supports this card and model, in GGUF format; a cross-platform alternative",
             "url": _BASALT_URL, "steps": _BASALT_STEPS,
             "advisory": _MOE_ENGINE_ADVISORY,
         }
@@ -107,30 +107,30 @@ def _moe_engine_recommendation(config: dict, gpu: dict | None) -> dict | None:
     if rtx50:
         compat_check = _BASALT_FASTER_UNADAPTED
         if in_strata:
-            reason = (f"本卡 {gpu['generation']}（compute {cap:g}）是 RTX 50，Basalt 通常更快，但已发布列表不含本模型；"
-                      "Strata 已发布对应 GGUF，默认推荐 Strata")
-            alternative = "Basalt 已发布的 MoE 只有 Flash-Next 与 DeepSeek-V4.1-Flash；自行确认有兼容 .basalt 后再换"
+            reason = (f"This card {gpu['generation']} (compute {cap:g}) is RTX 50 and Basalt is usually faster, but the published list does not include this model; "
+                      "Strata has published the matching GGUF, so Strata is the default recommendation")
+            alternative = "Basalt's published MoE models are only Flash-Next and DeepSeek-V4.1-Flash; switch only after confirming a compatible .basalt yourself"
         else:
-            reason = (f"本卡 {gpu['generation']}（compute {cap:g}）是 RTX 50，Basalt 通常更快，但该 MoE 不在已发布列表；"
-                      "Strata 覆盖更广，默认推荐 Strata")
-            alternative = "Basalt 只支持 RTX 50（sm_120）且模型须在已发布列表内；自行确认兼容后再换"
-            compat_check += " 本模型也不在 Strata 已发布列表，运行前以两引擎官方仓库为准。"
+            reason = (f"This card {gpu['generation']} (compute {cap:g}) is RTX 50 and Basalt is usually faster, but this MoE is not in the published list; "
+                      "Strata has broader coverage, so Strata is the default recommendation")
+            alternative = "Basalt supports only RTX 50 (sm_120) and the model must be in the published list; switch only after confirming compatibility yourself"
+            compat_check += " This model is also not in Strata's published list; defer to both engines' official repositories before running."
     elif cap is not None:
-        reason = f"本卡 {gpu['generation']}（compute {cap:g}）不是 RTX 50 的 sm_120；Basalt 跑不了，故选覆盖 RTX 20/30/40/50 与多平台的 Strata"
-        alternative = "Basalt 只支持 NVIDIA RTX 50（sm_120，compute 12.0），数据中心 Blackwell（compute 10.0）也不适用"
+        reason = f"This card {gpu['generation']} (compute {cap:g}) is not RTX 50 sm_120; Basalt cannot run, so Strata is chosen for its coverage of RTX 20/30/40/50 and multiple platforms"
+        alternative = "Basalt supports only NVIDIA RTX 50 (sm_120, compute 12.0); data-center Blackwell (compute 10.0) is also not applicable"
     else:
-        reason = ("未检测到 NVIDIA 显卡（可能为 AMD/Intel/Apple 或无独显）；Strata 支持 NVIDIA RTX 20/30/40/50、"
-                  "AMD、Intel Arc（Linux）、Apple Silicon，Basalt 只限 RTX 50")
-        alternative = "Basalt 只限 NVIDIA RTX 50（sm_120）；换用 RTX 50 系才可选"
+        reason = ("No NVIDIA GPU detected (possibly AMD/Intel/Apple or no discrete GPU); Strata supports NVIDIA RTX 20/30/40/50, "
+                  "AMD, Intel Arc (Linux) and Apple Silicon; Basalt is limited to RTX 50")
+        alternative = "Basalt is limited to NVIDIA RTX 50 (sm_120); it becomes an option only with an RTX 50 series card"
     if not in_strata and not rtx50:
-        reason += "；该架构不在两引擎已发布模型列表，运行前以官方仓库为准"
+        reason += "; this architecture is not in either engine's published model list; defer to the official repositories before running"
     return {
         "engine": "strata", "label": "Strata",
         "reason": reason,
         "compat_check": compat_check,
-        "requirements": "12GB 级显存起；内存按档位（Qwen3.8-Flash-Next Q2_0 约 37.6GB、Coder 约 32GB、完整建议 64GB+，权重 RAM+VRAM 合计）；GPU→RAM→SSD 三级专家缓存；NVIDIA 需 CUDA 13/驱动 580+",
-        "format": "GGUF（标准量化，ISTA-DASLab / Unsloth 等）",
-        "models": "Qwen3.8-Flash-Next、Qwen3.6-35B-A3B、DeepSeek-V4.1-Flash",
+        "requirements": "From 12GB-class VRAM; RAM by tier (Qwen3.8-Flash-Next Q2_0 about 37.6GB, Coder about 32GB, 64GB+ recommended for full residency; weights counted as RAM+VRAM combined); three-level GPU→RAM→SSD expert cache; NVIDIA needs CUDA 13 / driver 580+",
+        "format": "GGUF (standard quantization, ISTA-DASLab / Unsloth etc.)",
+        "models": "Qwen3.8-Flash-Next, Qwen3.6-35B-A3B, DeepSeek-V4.1-Flash",
         "alternative": alternative,
         "url": _STRATA_URL, "steps": _STRATA_STEPS,
         "advisory": _MOE_ENGINE_ADVISORY,
@@ -139,16 +139,16 @@ def _moe_engine_recommendation(config: dict, gpu: dict | None) -> dict | None:
 
 def _dense_runtime(gpu: dict | None) -> dict:
     """Dense artifacts stay .ninfer; fusion-kvmem is the suggested long-context runner."""
-    card = f"本卡 {gpu['generation']}（compute {gpu['compute_cap']:g}）" if gpu else "未检测到 NVIDIA 显卡"
+    card = f"This card {gpu['generation']} (compute {gpu['compute_cap']:g})" if gpu else "No NVIDIA GPU detected"
     return {
         "engine": "fusion-kvmem", "label": "ninfer-fusion-kvmem",
-        "reason": f"{card}。Dense 模型建议用 ninfer-fusion-kvmem 单独运行本页产出的 .ninfer：它按显存把 KV 窗口放在 GPU、其余放内存，适合长上下文。",
-        "requirements": "Windows x64 预编译包按架构分：RTX 50 用 sm_120a、RTX 40 用 sm_89、RTX 30 用 sm_86；其他显卡先看仓库 README。实验分支，首次以引擎日志为准。",
-        "format": ".ninfer（与本页产物相同，不需要另下 GGUF/.basalt）",
-        "models": "仓库说明覆盖的 Dense NInfer 几何，含 Qwen3.5 / Bonsai 27B 三值",
-        "alternative": "本页「启动模型服务」仍用配套 NInfer 引擎，不依赖这个仓库",
+        "reason": f"{card}. For Dense models, run the .ninfer produced on this page separately with ninfer-fusion-kvmem: it keeps the KV window on the GPU according to VRAM and the rest in RAM, suited to long context.",
+        "requirements": "Windows x64 prebuilt packages are split by architecture: RTX 50 uses sm_120a, RTX 40 sm_89, RTX 30 sm_86; for other GPUs check the repository README first. Experimental branch; on the first run defer to the engine logs.",
+        "format": ".ninfer (the same as this page's artifact; no separate GGUF/.basalt download needed)",
+        "models": "The Dense NInfer geometries covered by the repository notes, including Qwen3.5 / Bonsai 27B ternary",
+        "alternative": "'Start model API' on this page still uses the companion NInfer engine and does not depend on this repository",
         "url": _FUSION_URL, "steps": _FUSION_STEPS,
-        "advisory": "选型建议，不集成。fusion-kvmem 单独下载运行；无 LICENSE 的 ninfer-kvmem-actkv 不推荐。",
+        "advisory": "Selection advice only, no integration. Download and run fusion-kvmem separately; the LICENSE-less ninfer-kvmem-actkv is not recommended.",
     }
 
 
@@ -209,11 +209,11 @@ def choices(config: dict, components: dict | None = None, *, route: str | None =
     optional = {}
     architectures = architecture_names(config)
     if any(arch in (*QWEN35_DENSE,*QWEN35_MOE,*FLASH_NEXT,*GEMMA4) for arch in architectures):
-        optional["mtp"] = {"label":"外部 MTP 组件", "kind":"model"}
+        optional["mtp"] = {"label":"External MTP component", "kind":"model"}
     if any(arch in (*QWEN35_DENSE,*QWEN35_MOE) for arch in architectures):
-        optional["dflash2"] = {"label":"外部 DFlash2 检查点", "kind":"directory"}
+        optional["dflash2"] = {"label":"External DFlash2 checkpoint", "kind":"directory"}
     if any(arch in FLASH_NEXT for arch in architectures):
-        optional["ngram"] = {"label":"n-gram 表", "kind":"file"}
+        optional["ngram"] = {"label":"n-gram table", "kind":"file"}
     recommendation = runtime_recommendation(config, gpu)
     return {"detected_components":[name for name in ("mtp","dflash2") if (components or {}).get(name,{}).get("detected")],"optional_sources":optional,
             "architecture_kind":architecture_kind(config), "gpu":gpu,
@@ -223,8 +223,8 @@ def choices(config: dict, components: dict | None = None, *, route: str | None =
             "targets":[_target_entry(r, cap, provided) for r in candidates],
             "provided_sources":list(provided), "requires_explicit_target":explicit, "source_fields":SOURCE_FIELDS,
             "speculation":["auto","none"] + [key for key in ("mtp","dflash2") if (components or {}).get(key,{}).get("detected")],
-            "unsupported":[{"name":"运行格式与位宽","reason":"AWQ/GPTQ 使用独立 HF 引擎，保留原生格式；不等同于 NInfer Q4。仅显示已接入的架构与打包布局，任意位宽、厂商重排格式仍不支持。"}] + ([{"name":"Qwen3.5 AWQ 新量化","reason":"GPTQModel 7.10 在本机 Qwen3.5 验收中出现明显质量退化，已停用新量化；请选择 GPTQ 或 NInfer。已有 AWQ 仅作原生导入。"}] if config.get("model_type") in ("qwen3_5","qwen3_5_text") else []),
-            "quality_note":"质量门禁仅覆盖同语料 PPL；不等同于所有任务能力保证。"}
+            "unsupported":[{"name":"Runtime format and bit width","reason":"AWQ/GPTQ uses a separate HF engine and keeps the native format; it is not equivalent to NInfer Q4. Only wired-in architectures and packed layouts are shown; arbitrary bit widths and vendor-reordered formats remain unsupported."}] + ([{"name":"New Qwen3.5 AWQ quantization","reason":"GPTQModel 7.10 showed clear quality degradation in local Qwen3.5 acceptance, so new AWQ quantization is disabled; choose GPTQ or NInfer. Existing AWQ is native import only."}] if config.get("model_type") in ("qwen3_5","qwen3_5_text") else []),
+            "quality_note":"The quality gate only covers same-corpus PPL; it is not a guarantee of every task capability."}
 
 
 def _unsupported(config: dict) -> bool:
@@ -235,13 +235,13 @@ def _unsupported(config: dict) -> bool:
 def _remote_config(reference: str) -> dict:
     repository, revision, filename = reference_parts(reference)
     if not repository or filename:
-        raise ValueError("原始来源必须是完整模型仓库链接")
+        raise ValueError("The original source must be a complete model repository link")
     resolver = ModelResolver(Path.cwd(), lambda _: None)
     info = resolver.info(repository, revision)
     if not any(item["rfilename"] == "config.json" for item in info.get("siblings", [])):
-        raise ValueError("原始仓库缺少 config.json")
+        raise ValueError("The original repository lacks config.json")
     if not any(item["rfilename"] in ("tokenizer.json", "tokenizer.model") for item in info.get("siblings", [])):
-        raise ValueError("原始仓库缺少 tokenizer.json / tokenizer.model，请提供含分词器的原始模型仓库")
+        raise ValueError("The original repository lacks tokenizer.json / tokenizer.model; provide an original model repository that includes a tokenizer")
     return _remote_metadata(repository,info)
 
 
@@ -262,7 +262,7 @@ def precheck(model: str, original_model: str | None = None) -> dict:
     repository, revision, filename = reference_parts(model)
     remote = not path.exists() and repository
     if not path.exists() and not remote:
-        return {"ready":False,"message":"找不到这个模型，请重新选择模型文件夹或 GGUF 文件。"}
+        return {"ready":False,"message":"This model cannot be found; reselect the model folder or GGUF file."}
     try:
         cuda_package()
         inspector = ModelInspector()
@@ -273,41 +273,41 @@ def precheck(model: str, original_model: str | None = None) -> dict:
             has_weights = any(item["rfilename"].endswith(".safetensors") and "/" not in item["rfilename"] for item in info.get("siblings", []))
             if filename or (ggufs and not has_weights):
                 if not filename and len(ggufs) > 1:
-                    return {"ready":False,"message":"请选择仓库中的具体 GGUF 文件，不会擅自更换精度。","action":"choose_file",
+                    return {"ready":False,"message":"Select the specific GGUF file in the repository; precision is never changed automatically.","action":"choose_file",
                             "input_candidates":[{"name":name,"reference":f"https://huggingface.co/{repository}/resolve/{info['sha']}/{name}"} for name in ggufs]}
                 if filename and not any(item["rfilename"] == filename for item in info.get("siblings", [])):
-                    raise ValueError("所选仓库文件不存在")
+                    raise ValueError("The selected repository file does not exist")
                 base = original_model
                 if not base:
                     card = info.get("cardData") or {}
                     origin = card.get("base_model")
                     base = origin if isinstance(origin,str) else origin[0] if isinstance(origin,list) and len(origin)==1 and isinstance(origin[0],str) else None
                 if not base:
-                    return {"ready":False,"message":"此 GGUF 仓库未声明唯一原始来源，需要补充原始模型的配置与分词器信息。","action":"provide_original"}
+                    return {"ready":False,"message":"This GGUF repository does not declare a unique original source; the original model's config and tokenizer information must be supplied.","action":"provide_original"}
                 try:
                     config = inspector.inspect(base,metadata_only=True).config if Path(base).exists() else _remote_config(base)
                 except (ValueError, OSError) as exc:
                     return {"ready":False,"message":str(exc),"action":"provide_original"}
                 route = "gguf"  # Actual ternary layout is confirmed from the downloaded header.
                 result = choices(config, route=route, provided=(route,))
-                if not result["targets"]: return {"ready":False,"message":"当前模型尺寸没有 GGUF 直接导入路线，请将待处理模型改为原始高精度模型目录或仓库链接重新检查。","action":"choose_original"}
-                return {"ready":True,"remote":True,"can_edit_weights":False,"message":"将核对 GGUF 实际存储格式，按来源精度导入。",**result}
+                if not result["targets"]: return {"ready":False,"message":"There is no direct GGUF import route for this model size; change the model to process to the original high-precision model directory or repository link and recheck.","action":"choose_original"}
+                return {"ready":True,"remote":True,"can_edit_weights":False,"message":"The GGUF's actual storage format will be verified and imported at the source precision.",**result}
             config = _remote_metadata(repository,info)
             if _unsupported(config):
                 result = choices(config)
-                if not result["targets"]: raise ValueError("此 AWQ/GPTQ 架构没有接入 HF 路线")
-                return {"ready":True,"remote":True,"can_edit_weights":False,"message":"将保留原生 AWQ/GPTQ 位宽，使用 HF 引擎；下载后核对实际 packed 张量。",**result}
+                if not result["targets"]: raise ValueError("This AWQ/GPTQ architecture has no wired-in HF route")
+                return {"ready":True,"remote":True,"can_edit_weights":False,"message":"The native AWQ/GPTQ bit width is retained and the HF engine is used; the actual packed tensors are verified after download.",**result}
             if _contains_nvfp4(config.get("quantization_config", {})):
                 result = choices(config,route="quantized",provided=("quantized",))
-                if not result["targets"]: raise ValueError("此量化布局或架构没有已验证导入路线")
-                return {"ready":True,"remote":True,"can_edit_weights":False,"message":"将核对 NVFP4 实际张量与来源；不会把文件名当作兼容证明。",**result}
+                if not result["targets"]: raise ValueError("This quantization layout or architecture has no verified import route")
+                return {"ready":True,"remote":True,"can_edit_weights":False,"message":"The actual NVFP4 tensors and source will be verified; a file name is never treated as proof of compatibility.",**result}
             check_config_support(config)
-            return {"ready":True,"remote":True,"can_edit_weights":not bool(config.get("quantization_config")),"message":"已核对指定版本的配置，尚未下载权重。",**choices(config)}
+            return {"ready":True,"remote":True,"can_edit_weights":not bool(config.get("quantization_config")),"message":"The pinned revision's config has been verified; weights have not been downloaded yet.",**choices(config)}
         inspection = inspector.inspect(path)
         if original_model and inspection.input_kind not in (InputKind.GGUF, InputKind.NVFP4):
-            return {"ready":False,"message":"当前待处理模型已是原始 HF 模型，请清空“原始模型来源”后重新检查；该字段只用于 GGUF / NVFP4 导入。"}
+            return {"ready":False,"message":"The model to process is already an original HF model; clear 'Original model source' and recheck. That field is only for GGUF / NVFP4 import."}
         if inspection.input_kind == InputKind.NVFP4 and not inspection.quantization.get("nvfp4_layout_verified"):
-            raise ValueError("NVFP4 缺少可核实的 packed 权重或缩放张量，请提供完整检查点")
+            raise ValueError("The NVFP4 lacks verifiable packed weights or scale tensors; provide a complete checkpoint")
         if inspection.input_kind in (InputKind.GGUF, InputKind.NVFP4):
             directory = path if path.is_dir() else path.parent
             from .gguf_standalone import can_prepare, prepare_resources
@@ -318,33 +318,33 @@ def precheck(model: str, original_model: str | None = None) -> dict:
                 result = choices(config, route='gguf', provided=('gguf',), source_quantization=inspection.quantization)
                 from .backends.registry import get_recipe, serving_context_ceiling
                 ceiling = serving_context_ceiling(get_recipe("qwen3_5_gguf_standalone"), config)
-                limit = f"当前适配引擎上下文上限为 {ceiling}。" if ceiling else "此几何没有已知的适配引擎上下文上限。"
+                limit = f"The adapted engine's context ceiling is {ceiling}. " if ceiling else "This geometry has no known adapted-engine context ceiling."
                 return {**result,"optional_sources":{},"ready":True,"can_edit_weights":False,
                         **({"recommended_max_context":ceiling} if ceiling else {}),
-                        "message":"已从 GGUF 内嵌信息生成配置、分词器和聊天模板，无需原始模型目录。权重将解码后重编码为 Q8_0，质量需另外验收；" + limit}
+                        "message":"Config, tokenizer and chat template were generated from the GGUF embedded information; no original model directory is needed. Weights will be decoded and re-encoded as Q8_0; quality needs separate acceptance; " + limit}
             base = original_model
             if not base and inspection.input_kind == InputKind.GGUF and (directory/"config.json").is_file() and any((directory/name).is_file() for name in ("tokenizer.json","tokenizer.model")):
                 base = str(directory)
             if not base: base = ModelResolver(directory,lambda _:None).origin(directory,inspection.quantization)
             if not base:
-                return {"ready":False,"message":"已选量化模型缺少可确认的原始来源，需要补充原始模型的配置与分词器信息。","action":"provide_original"}
+                return {"ready":False,"message":"The selected quantized model lacks a confirmable original source; the original model's config and tokenizer information must be supplied.","action":"provide_original"}
             try:
                 config = inspector.inspect(base,metadata_only=inspection.input_kind == InputKind.GGUF).config if Path(base).exists() else _remote_config(base)
             except (ValueError, OSError) as exc:
                 return {"ready":False,"message":str(exc),"action":"provide_original"}
             route = "quantized" if inspection.input_kind == InputKind.NVFP4 else "ternary" if inspection.quantization.get("ternary_pq2") else "gguf"
             result = choices(config,inspection.speculative_components,route=route,provided=(route,),source_quantization=inspection.quantization)
-            if not result["targets"]: return {"ready":False,"message":"配置已识别，但当前转换器没有此模型尺寸的 GGUF / NVFP4 直接导入路线。请将待处理模型改为原始高精度模型目录或仓库链接，重新检查可用量化方案。","action":"choose_original"}
-            return {"ready":True,"can_edit_weights":False,"message":"已识别导入路线，来源位宽保持不变。",**result}
+            if not result["targets"]: return {"ready":False,"message":"The config was recognized, but the current converter has no direct GGUF / NVFP4 import route for this model size. Change the model to process to the original high-precision model directory or repository link and recheck the available quantization plans.","action":"choose_original"}
+            return {"ready":True,"can_edit_weights":False,"message":"Import route identified; the source bit width stays unchanged.",**result}
         if _unsupported(inspection.config):
             from .backends.hf_worker import check_checkpoint_layout
             check_checkpoint_layout(path if path.is_dir() else path.parent)
             result = choices(inspection.config)
-            if not result["targets"]: raise ValueError("此 AWQ/GPTQ 架构没有接入 HF 路线")
-            if not inspection.usable: raise ValueError("AWQ/GPTQ 检查点不完整")
-            return {"ready":True,"can_edit_weights":False,"message":"保留已有量化权重，选择 HF 原生保留路线后验证；不会重新量化。",**result}
+            if not result["targets"]: raise ValueError("This AWQ/GPTQ architecture has no wired-in HF route")
+            if not inspection.usable: raise ValueError("The AWQ/GPTQ checkpoint is incomplete")
+            return {"ready":True,"can_edit_weights":False,"message":"Existing quantized weights are retained; validate after choosing the HF native retention route. No requantization.",**result}
         check_config_support(inspection.config)
-        if not inspection.usable: raise ValueError("模型文件不完整，请选择包含配置、分词器与权重的模型目录")
-        return {"ready":True,"can_edit_weights":inspection.weight_precision in ("bf16","fp16","fp32"),"message":"模型已识别，请选择处理方案。",**choices(inspection.config,inspection.speculative_components)}
+        if not inspection.usable: raise ValueError("The model files are incomplete; select a model directory containing config, tokenizer and weights")
+        return {"ready":True,"can_edit_weights":inspection.weight_precision in ("bf16","fp16","fp32"),"message":"Model recognized; choose a processing plan.",**choices(inspection.config,inspection.speculative_components)}
     except (ValueError,OSError,RuntimeError) as exc:
         return {"ready":False,"message":str(exc)}

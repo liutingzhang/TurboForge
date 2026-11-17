@@ -88,7 +88,7 @@ def test_missing_metadata_is_not_guessed(key):
 def test_duplicate_vocabulary_is_rejected(tmp_path):
     values=metadata();values['tokenizer.ggml.tokens'][1]='a'
     path=tmp_path/'duplicate.gguf';write_header(path,values)
-    with pytest.raises(ValueError,match='重复'):prepare_resources(path,tmp_path/'cache')
+    with pytest.raises(ValueError,match='duplicate tokens'):prepare_resources(path,tmp_path/'cache')
 
 
 def test_wrong_geometry_is_not_silently_accepted():

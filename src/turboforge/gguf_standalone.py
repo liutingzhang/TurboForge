@@ -28,19 +28,19 @@ def read_metadata(path: Path) -> dict:
     with path.open('rb') as stream:
         magic, version, _, count = struct.unpack('<4sIQQ', _read_exact(stream, 24))
         if magic != b'GGUF' or version not in (2, 3):
-            raise ValueError('独立导入需要有效 GGUF v2/v3 文件')
+            raise ValueError('Standalone import needs a valid GGUF v2/v3 file')
         if count > 100_000:
-            raise ValueError('GGUF 元数据条目过多')
+            raise ValueError('Too many GGUF metadata entries')
         metadata = {}
         for _ in range(count):
             key = _read_string(stream)
             if key in metadata:
-                raise ValueError('GGUF 元数据存在重复键：' + key)
+                raise ValueError('Duplicate GGUF metadata key: ' + key)
             kind = struct.unpack('<I', _read_exact(stream, 4))[0]
             if kind == 9:
                 element, size = struct.unpack('<IQ', _read_exact(stream, 12))
                 if element == 9 or size > 10_000_000:
-                    raise ValueError('GGUF 元数据数组类型或长度不受支持')
+                    raise ValueError('Unsupported GGUF metadata array type or length')
                 value = [_read_value(stream, element) for _ in range(size)]
             else:
                 value = _read_value(stream, kind)
@@ -50,42 +50,42 @@ def read_metadata(path: Path) -> dict:
 
 def configuration(metadata: dict) -> dict:
     if metadata.get('split.count', 1) != 1:
-        raise ValueError('此独立导入路线当前仅支持完整单文件 GGUF，不支持分片')
+        raise ValueError('This standalone import route currently supports only a complete single-file GGUF, not shards')
     if metadata.get('general.architecture') != 'qwen35' or metadata.get('general.file_type') != 7:
-        raise ValueError('当前独立资源生成支持 Qwen3.5 dense Q8_0 GGUF')
+        raise ValueError('Current standalone resource generation supports Qwen3.5 dense Q8_0 GGUF')
     def positive(key):
         value = metadata.get('qwen35.' + key)
         if type(value) is not int or value <= 0:
-            raise ValueError('GGUF 缺少有效结构参数：qwen35.' + key)
+            raise ValueError('GGUF lacks a valid geometry parameter: qwen35.' + key)
         return value
     def positive_float(key):
         value = metadata.get('qwen35.' + key)
         if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
-            raise ValueError('GGUF 缺少有效结构参数：qwen35.' + key)
+            raise ValueError('GGUF lacks a valid geometry parameter: qwen35.' + key)
         return value
     hidden = positive('embedding_length')
     if hidden != 1024:
-        raise ValueError('此独立导入路线当前验证范围为 hidden_size=1024')
+        raise ValueError('This standalone import route is currently validated for hidden_size=1024')
     tokens = metadata.get('tokenizer.ggml.tokens')
     if not isinstance(tokens, list) or not tokens or not all(isinstance(t, str) for t in tokens):
-        raise ValueError('GGUF 未内嵌完整词表，无法生成分词器')
+        raise ValueError('The GGUF does not embed a complete vocabulary; a tokenizer cannot be generated')
     if metadata.get('tokenizer.ggml.model') != 'gpt2' or metadata.get('tokenizer.ggml.pre') != 'qwen2':
-        raise ValueError('GGUF 内嵌分词器不是已支持的 Qwen2 BPE 规则')
+        raise ValueError('The GGUF embedded tokenizer is not the supported Qwen2 BPE scheme')
     if not metadata.get('tokenizer.ggml.merges') or not metadata.get('tokenizer.chat_template'):
-        raise ValueError('GGUF 缺少 BPE merges 或聊天模板，不能生成完整前端资源')
+        raise ValueError('The GGUF lacks BPE merges or a chat template; complete frontend resources cannot be generated')
     head = positive('attention.key_length')
     rotary = positive('rope.dimension_count')
     if rotary > head or rotary % 2:
-        raise ValueError('GGUF 旋转位置编码维度无效')
+        raise ValueError('Invalid GGUF rotary position-embedding dimension')
     sections = metadata.get('qwen35.rope.dimension_sections')
     if not isinstance(sections, list) or len(sections) < 3 or any(type(v) is not int or v < 0 for v in sections) or sum(sections) != rotary // 2:
-        raise ValueError('GGUF 缺少可核实的 MRoPE 分段信息')
+        raise ValueError('The GGUF lacks verifiable MRoPE section information')
     if any(sections[3:]):
-        raise ValueError('此 MRoPE 分段布局尚不受支持')
+        raise ValueError('This MRoPE section layout is not yet supported')
     value_heads = positive('ssm.time_step_rank')
     inner = positive('ssm.inner_size')
     if inner % value_heads:
-        raise ValueError('GGUF GDN 维度不整除')
+        raise ValueError('GGUF GDN dimensions are not divisible')
     return {
         'architectures': ['Qwen3_5ForCausalLM'], 'model_type': 'qwen3_5_text',
         'hidden_size': hidden, 'vocab_size': len(tokens),
@@ -125,17 +125,17 @@ def prepare_resources(path: Path, root: Path) -> Path:
             names.add(read_string(stream))
             rank = struct.unpack('<I', _read_exact(stream, 4))[0]
             if not 1 <= rank <= 4:
-                raise ValueError('GGUF 张量维数不受支持')
+                raise ValueError('Unsupported GGUF tensor dimensionality')
             _read_exact(stream, rank * 8 + 12)
     config['tie_word_embeddings'] = 'output.weight' not in names
     if any('nextn' in name for name in names):
-        raise ValueError('独立 GGUF 的 MTP 导入尚未验证，不能静默丢弃推测头')
+        raise ValueError('MTP import for standalone GGUF is not yet validated; the speculative head cannot be silently dropped')
     tokens = metadata['tokenizer.ggml.tokens']
     types = metadata.get('tokenizer.ggml.token_type')
     if not isinstance(types, list) or len(types) != len(tokens) or any(type(t) is not int or t not in range(1, 7) for t in types):
-        raise ValueError('GGUF 缺少 token_type，无法核实特殊词元')
+        raise ValueError('The GGUF lacks token_type; special tokens cannot be verified')
     if len(set(tokens)) != len(tokens):
-        raise ValueError('GGUF 词表含重复词元，无法无歧义生成分词器')
+        raise ValueError('The GGUF vocabulary contains duplicate tokens; a tokenizer cannot be generated unambiguously')
     added = [{'id': i, 'content': token, 'single_word': False, 'lstrip': False,
               'rstrip': False, 'normalized': False, 'special': kind == 3}
              for i, (token, kind) in enumerate(zip(tokens, types)) if kind in (3, 4)]
@@ -144,7 +144,7 @@ def prepare_resources(path: Path, root: Path) -> Path:
     for merge in metadata['tokenizer.ggml.merges']:
         pieces = merge.split(' ')
         if len(pieces) != 2:
-            raise ValueError('GGUF BPE merge 必须包含两个词元')
+            raise ValueError('A GGUF BPE merge must contain two tokens')
         merges.append(pieces)
     tokenizer = {'version': '1.0', 'truncation': None, 'padding': None,
                  'added_tokens': added, 'normalizer': {'type': 'NFC'},
@@ -159,13 +159,13 @@ def prepare_resources(path: Path, root: Path) -> Path:
     for name in ('bos', 'eos', 'padding'):
         index = metadata.get('tokenizer.ggml.' + name + '_token_id')
         if type(index) is not int or not 0 <= index < len(tokens):
-            raise ValueError('GGUF 缺少有效特殊词元 ID：' + name)
+            raise ValueError('GGUF lacks a valid special-token ID: ' + name)
         special[('pad' if name == 'padding' else name) + '_token'] = tokens[index]
     tokenizer_config = {**special, 'add_bos_token': metadata.get('tokenizer.ggml.add_bos_token', False),
                         'add_prefix_space': False, 'chat_template': metadata['tokenizer.chat_template'],
                         'added_tokens_decoder': {str(t['id']): t for t in added}}
     if special['pad_token'] != '<|endoftext|>' or tokenizer_config['add_bos_token'] is not False:
-        raise ValueError('GGUF 特殊词元规则与当前 Qwen3.5 前端不兼容')
+        raise ValueError('The GGUF special-token rules are incompatible with the current Qwen3.5 frontend')
     identity = hashlib.sha256((str(path.resolve()) + str(path.stat().st_size) + str(path.stat().st_mtime_ns)).encode()).hexdigest()[:20]
     target = root / 'gguf-resources' / identity
     target.mkdir(parents=True, exist_ok=True)

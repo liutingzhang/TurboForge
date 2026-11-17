@@ -94,7 +94,7 @@ class BuildRunner:
                 manifest.data["processed_weights"] = processed
                 manifest.save()
                 if reference is not None and (not processed or reference.get("processed_weights") != processed):
-                    raise ValueError("实际越狱后权重与对照不一致，不能作为纯量化对照")
+                    raise ValueError("The weights after actual abliteration differ from the baseline; they cannot serve as a pure-quantization baseline")
             artifact = self._run_converter(config, plan, output_dir, manifest, model_dir)
         except (RuntimeError, NotImplementedError, OSError, ValueError) as exc:
             manifest.transition("failed", f"{type(exc).__name__}: {exc}")
@@ -113,7 +113,7 @@ class BuildRunner:
         try:
             self._write_reports(artifact, output_dir, config, manifest, plan)
         except (RuntimeError, OSError, ValueError) as exc:
-            manifest.transition("failed", f"评测失败：{type(exc).__name__}: {exc}")
+            manifest.transition("failed", f"Evaluation failed: {type(exc).__name__}: {exc}")
             return manifest
         if manifest.data["status"] in ("validated", "converted"):
             self._write_launcher(artifact, output_dir, config, manifest, plan)
@@ -310,21 +310,21 @@ class BuildRunner:
             baseline_path = Path(config.benchmark["baseline_artifact"])
             provenance = baseline_path.parent / "manifest.json"
             if not provenance.is_file():
-                raise ValueError("质量门禁需要 TurboForge 生成的对照产物及 manifest，以核对模型来源和处理阶段")
+                raise ValueError("The quality gate needs a TurboForge-generated baseline artifact and its manifest to verify the model source and processing stage")
             reference = read_json_atomic(provenance)
             if reference.get("source_files") != manifest.data.get("source_files") or reference.get("config", {}).get("jailbreak") != config.jailbreak:
-                raise ValueError("对照模型的权重来源或越狱处理阶段不同，不能把混合变化标成量化质量损失")
+                raise ValueError("The baseline model has a different weight source or abliteration stage; mixed changes cannot be labeled as quantization quality loss")
             artifact_info = reference.get("artifacts", {}).get("ninfer_artifact", {})
             from .manifest import file_sha256
             if not artifact_info.get("sha256") or file_sha256(baseline_path) != artifact_info["sha256"]:
-                raise ValueError("对照产物与其 manifest 校验值不一致，质量门禁不能通过")
+                raise ValueError("The baseline artifact does not match its manifest checksum; the quality gate cannot pass")
             if not reference.get("source_identity") or reference["source_identity"] != manifest.data.get("source_identity"):
-                raise ValueError("对照缺少匹配的配置/分词器指纹，请用相同模型资料重新生成对照产物")
+                raise ValueError("The baseline lacks a matching config/tokenizer fingerprint; regenerate the baseline artifact from the same model materials")
             if reference.get("config", {}).get("jailbreak_params", {}) != config.jailbreak_params:
-                raise ValueError("对照模型的越狱参数不同，不能作为纯量化质量对照")
+                raise ValueError("The baseline model has different abliteration parameters; it cannot serve as a pure-quantization quality baseline")
             imported = ("gguf", "ternary", "quantized", "engram", "ngram")
             if {key:reference.get("config", {}).get("sources", {}).get(key) for key in imported} != {key:config.sources.get(key) for key in imported}:
-                raise ValueError("对照使用了不同的导入权重或附加表，不能认定为相同来源")
+                raise ValueError("The baseline used different imported weights or extra tables; it cannot be treated as the same source")
             return reference
         return None
 

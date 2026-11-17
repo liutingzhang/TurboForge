@@ -50,7 +50,7 @@ class ResourceEstimator:
                               "manages its own host memory and no number is invented")
         if calibration:
             peak_ram = inspection.element_count * 4 + 1024 * _MIB
-            ram_assumption = "自动标定在 CPU 上以 FP32 加载完整模型；估算含权重与 1 GiB 余量，激活峰值仍可能更高"
+            ram_assumption = "Automatic calibration loads the full model in FP32 on the CPU; the estimate includes weights plus 1 GiB headroom, and the activation peak can still be higher"
 
         gpu = gpu_status()
         available_ram = memory_available()

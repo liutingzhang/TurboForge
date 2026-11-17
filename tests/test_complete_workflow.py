@@ -40,7 +40,7 @@ def test_missing_split_shard_is_refused_before_download(tmp_path):
     resolver=ModelResolver(tmp_path,lambda _:None)
     info={"sha":"a"*40,"siblings":[{"rfilename":"model-00001-of-00002.gguf","size":10}]}
     with patch.object(resolver,"info",return_value=info),patch("turboforge.model_sources.download") as download:
-        with pytest.raises(ValueError,match="缺少分片"):resolver.snapshot("Org/Model")
+        with pytest.raises(ValueError,match="missing shards"):resolver.snapshot("Org/Model")
     download.assert_not_called()
 
 
@@ -48,7 +48,7 @@ def test_multiple_gguf_precisions_are_not_silently_changed(tmp_path):
     resolver=ModelResolver(tmp_path,lambda _:None)
     info={"sha":"a"*40,"siblings":[{"rfilename":"Q4.gguf","size":10},{"rfilename":"Q8.gguf","size":20}]}
     with patch.object(resolver,"info",return_value=info),patch("turboforge.model_sources.download") as download:
-        with pytest.raises(ValueError,match="具体 GGUF"):resolver.snapshot("Org/Model")
+        with pytest.raises(ValueError,match="specific GGUF file"):resolver.snapshot("Org/Model")
     download.assert_not_called()
 
 
@@ -65,7 +65,7 @@ def test_unverified_nvfp4_does_not_download_original_weights(tmp_path):
     inspection=SimpleNamespace(input_kind=InputKind.NVFP4,config={},quantization={})
     resolver=ModelResolver(tmp_path,lambda _:None)
     with patch("turboforge.inspector.ModelInspector.inspect",return_value=inspection),patch.object(resolver,"snapshot") as fetch:
-        with pytest.raises(ValueError,match="缩放张量"):resolver.resolve(str(tmp_path))
+        with pytest.raises(ValueError,match="scale tensors are incomplete"):resolver.resolve(str(tmp_path))
     fetch.assert_not_called()
 
 

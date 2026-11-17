@@ -22,9 +22,9 @@ def check(root: Path) -> dict:
         errors.append(str(exc))
     free = shutil.disk_usage(root).free
     if free < 1024**3:
-        errors.append("项目磁盘剩余空间不足 1 GiB，请将整个文件夹移到空间充足的磁盘后重试")
+        errors.append("The project disk has less than 1 GiB free; move the whole folder to a disk with enough space and retry")
     return {"ready": not errors, "errors": errors, "platform": platform.platform(),
             "python": sys.version.split()[0], "cuda_package": package, "disk_free_bytes": free,
-            "runtime": str(tools[1]) if tools else "首次转换自动下载官方引擎；未发布的适配需使用整合包",
-            "dependencies": {name: "已安装" if importlib.util.find_spec(name) else "按需自动安装"
+            "runtime": str(tools[1]) if tools else "The official engine is downloaded automatically on first conversion; unreleased adaptations require the bundle",
+            "dependencies": {name: "installed" if importlib.util.find_spec(name) else "installed on demand"
                              for name in ("flask", "torch", "numpy", "safetensors", "transformers")}}

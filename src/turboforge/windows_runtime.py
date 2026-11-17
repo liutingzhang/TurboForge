@@ -11,10 +11,10 @@ def imports(path: Path) -> list[str]:
             stream.seek(offset)
             return stream.read(size)
         if read(0, 2) != b"MZ":
-            raise ValueError(f"不是 Windows 可执行文件：{path.name}")
+            raise ValueError(f"Not a Windows executable: {path.name}")
         pe = struct.unpack("<I", read(60, 4))[0]
         if read(pe, 4) != b"PE\0\0":
-            raise ValueError(f"无效 PE 头：{path.name}")
+            raise ValueError(f"Invalid PE header: {path.name}")
         count = struct.unpack("<H", read(pe + 6, 2))[0]
         size = struct.unpack("<H", read(pe + 20, 2))[0]
         optional = pe + 24
@@ -28,7 +28,7 @@ def imports(path: Path) -> list[str]:
             for virtual_size, address, raw_size, pointer in sections:
                 if address <= value < address + max(virtual_size, raw_size):
                     return pointer + value - address
-            raise ValueError(f"PE 地址越界：{path.name}")
+            raise ValueError(f"PE address out of bounds: {path.name}")
         position = offset(rva)
         result = []
         while True:
@@ -52,7 +52,7 @@ def collect(engine: Path) -> dict[str, Path]:
                 continue
             dependency = next((directory / name for directory in search if (directory / name).is_file()), None)
             if dependency is None:
-                raise RuntimeError(f"发布包缺少运行库 {name}（由 {path.name} 引用），不能生成可分发整合包")
+                raise RuntimeError(f"The release is missing runtime {name} (referenced by {path.name}); a distributable bundle cannot be produced")
             # Windows OS/driver files stay on the destination OS. Only the
             # Microsoft C++ redistributable DLL family is copied app-locally.
             if dependency.parent == system and not key.startswith(("msvcp", "vcruntime", "concrt")):

@@ -24,7 +24,7 @@ def test_quality_gate_does_not_pass_missing_or_excessive_loss():
 
 
 def test_quality_gate_requires_paired_evaluation():
-    with pytest.raises(ValueError,match="质量门禁"):
+    with pytest.raises(ValueError,match="quality gate"):
         ForgeConfig.from_dict({"input_path":"m","output_dir":"o","benchmark":{"max_ppl_relative_increase":.1}})
 
 
@@ -43,5 +43,5 @@ def test_quality_gate_rejects_changed_baseline_file(tmp_path):
     baseline.write_bytes(b"changed")
     (tmp_path/"manifest.json").write_text(json.dumps({"source_files":[],"config":{"jailbreak":"none"},"artifacts":{"ninfer_artifact":{"sha256":"wrong"}}}))
     config=ForgeConfig("m","o",run_benchmark=True,benchmark={"max_ppl_relative_increase":.1,"baseline_artifact":str(baseline),"perplexity_text":"corpus.txt"})
-    with pytest.raises(ValueError,match="校验值不一致"):
+    with pytest.raises(ValueError,match="does not match its manifest checksum"):
         BuildRunner()._validate_quality_reference(config,SimpleNamespace(data={"status":"validated","source_files":[]}))

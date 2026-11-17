@@ -57,7 +57,7 @@ class ModelResolver:
         suffix = "/revision/" + urllib.parse.quote(revision, safe="") if revision else ""
         value = json.loads(read_url(f"https://huggingface.co/api/models/{repository}{suffix}?blobs=true"))
         if not re.fullmatch(r"[a-f0-9]{40}", value.get("sha", "")):
-            raise ValueError("模型仓库没有有效的固定版本")
+            raise ValueError("The model repository has no valid pinned revision")
         return value
 
     @staticmethod
@@ -83,7 +83,7 @@ class ModelResolver:
             if weights and not (filename and filename.endswith(".gguf")):
                 config_item = next((item for item in resources if item["rfilename"] == "config.json"), None)
                 if not config_item:
-                    raise ValueError("模型仓库缺少 config.json，无法确认架构")
+                    raise ValueError("The model repository lacks config.json; the architecture cannot be confirmed")
                 config_path = target / "config.json"
                 download(f"https://huggingface.co/{repository}/resolve/{revision}/config.json", config_path, emit=self.emit)
                 from .backends.registry import RECIPES
@@ -97,7 +97,7 @@ class ModelResolver:
                 from .backends.hf_quantization import quant_method, check_packed, HF_ARCHITECTURES
                 if quant_method(config) in ("awq", "gptq"):
                     if not self.hf_mode:
-                        raise ValueError("AWQ/GPTQ 需要选择 HF 原生保留路线，不能交给 NInfer；尚未下载权重")
+                        raise ValueError("AWQ/GPTQ must use the HF native retention route and cannot be handed to NInfer; weights have not been downloaded yet")
                     check_packed(config)
                 if self.check_config:
                     self.check_config(config)
@@ -105,30 +105,30 @@ class ModelResolver:
                 if self.hf_mode:
                     supported.update(HF_ARCHITECTURES)
                 if not any(arch in supported for arch in config.get("architectures", [])):
-                    raise ValueError("该模型架构尚不受转换器支持，已在下载大权重前停止")
+                    raise ValueError("This model architecture is not yet supported by the converter; stopped before downloading large weights")
                 selected += weights + [item for item in files if item["rfilename"] == "model.safetensors.index.json"]
             else:
                 ggufs = [item for item in files if item["rfilename"].lower().endswith(".gguf")
                          and not any(tag in item["rfilename"].lower() for tag in ("mmproj", "dflash", "mtp", "vision", "engram", "imatrix", "dspark"))]
                 if not ggufs:
-                    raise ValueError("仓库没有可转换的 Safetensors 或文本 GGUF 权重")
+                    raise ValueError("The repository has no convertible Safetensors or text GGUF weights")
                 # Candidate selection is based on declared size. Actual precision
                 # and architecture are read from the downloaded header, never the name.
                 firsts = [item for item in ggufs if not re.search(r"-\d{5}-of-\d{5}\.gguf$", item["rfilename"])
                           or "-00001-of-" in item["rfilename"]]
                 if not firsts:
-                    raise ValueError("GGUF 仓库缺少第一分片")
+                    raise ValueError("The GGUF repository is missing the first shard")
                 if filename:
                     chosen = next((item for item in ggufs if item["rfilename"] == filename), None)
                     if chosen is None:
-                        raise ValueError("模型链接指定的 GGUF 文件不存在")
+                        raise ValueError("The GGUF file specified by the model link does not exist")
                     filename = re.sub(r"-\d{5}-of-(\d{5})\.gguf$", r"-00001-of-\1.gguf", filename)
                     chosen = next((item for item in firsts if item["rfilename"] == filename), None)
                     if chosen is None:
-                        raise ValueError("所选 GGUF 缺少第一分片")
+                        raise ValueError("The selected GGUF is missing the first shard")
                 else:
                     if len(firsts) != 1:
-                        raise ValueError("仓库包含多个 GGUF 精度，请选择具体 GGUF 文件链接；不会擅自改用最小文件")
+                        raise ValueError("The repository contains multiple GGUF precisions; select a specific GGUF file link. The smallest file is never substituted automatically")
                     chosen = firsts[0]
                 name = chosen["rfilename"]
                 gguf_file = name
@@ -138,26 +138,26 @@ class ModelResolver:
                     selected += [item for item in ggufs if re.fullmatch(re.escape(prefix) + r"-\d{5}-of-" + match[1] + r"\.gguf", item["rfilename"])]
                     shard_numbers = {int(re.search(r"-(\d{5})-of-", item["rfilename"])[1]) for item in selected if item in ggufs}
                     if shard_numbers != set(range(1, int(match[1]) + 1)):
-                        raise ValueError("GGUF 仓库缺少分片，已在下载前停止")
+                        raise ValueError("The GGUF repository is missing shards; stopped before downloading")
                 else:
                     selected.append(chosen)
-                self.emit("自动选择仓库中的较小文本 GGUF：" + name)
+                self.emit("Automatically selected the smaller text GGUF in the repository: " + name)
         if not resources_only:
             for component in ("mtp","dflash2"):
                 prefixes=[prefix for prefix in (component+"/","components/"+component+"/") if any(item["rfilename"] == prefix+"config.json" for item in files)]
-                if len(prefixes) > 1: raise ValueError("仓库提供多份 "+component.upper()+"，请明确整理来源，不能猜测")
+                if len(prefixes) > 1: raise ValueError("The repository provides multiple "+component.upper()+" copies; organize the sources explicitly, no guessing")
                 for prefix in prefixes:
                     companion_config=json.loads(read_url(f"https://huggingface.co/{repository}/resolve/{revision}/{prefix}config.json"))
                     if component == "dflash2" and companion_config.get("architectures") != ["DFlash2DraftModel"]:
-                        raise ValueError("仓库 dflash2 目录没有 DFlash2DraftModel 声明")
+                        raise ValueError("The repository dflash2 directory has no DFlash2DraftModel declaration")
                     selected += [item for item in files if item["rfilename"].startswith(prefix) and (item["rfilename"].endswith(".safetensors") or Path(item["rfilename"]).name in _RESOURCES or item["rfilename"].endswith(".safetensors.index.json"))]
         total = sum(item.get("size", item.get("lfs", {}).get("size", 0)) for item in selected)
         self.root.mkdir(parents=True, exist_ok=True)
         pending = sum(item.get("size", item.get("lfs", {}).get("size", 0)) for item in selected
                       if not (target / item["rfilename"]).is_file())
         if shutil.disk_usage(self.root).free < pending + 256 * 1024**2:
-            raise RuntimeError(f"模型所需下载约 {total / 1024**3:.2f} GiB，缓存盘空间不足")
-        self.emit(f"获取 {repository}@{revision[:12]}，本次所需文件约 {total / 1024**3:.2f} GiB")
+            raise RuntimeError(f"The model needs about {total / 1024**3:.2f} GiB of downloads; the cache disk has insufficient space")
+        self.emit(f"Fetching {repository}@{revision[:12]}; about {total / 1024**3:.2f} GiB of files needed this run")
         for item in selected:
             name = item["rfilename"]
             destination = safe_member(target, name)
@@ -184,7 +184,7 @@ class ModelResolver:
         if len(known) == 1:
             return known[0]
         if len(known) > 1:
-            raise ValueError("模型声明了多个不同的原始来源，无法安全自动选择。请直接提供原始模型的 Hugging Face 仓库链接。")
+            raise ValueError("The model declares multiple different original sources; a safe automatic choice is not possible. Provide the original model's Hugging Face repository link directly.")
         if allow_self and receipt.is_file() and repo_id(saved.get("repo", "")):
             return saved["repo"]
         return None
@@ -198,7 +198,7 @@ class ModelResolver:
         if not path.exists():
             repository = repo_id(reference)
             if repository is None:
-                raise ValueError("找不到模型；请选择本机模型，或填写 Hugging Face 的组织/模型名、仓库链接")
+                raise ValueError("Model not found; select a local model, or enter a Hugging Face org/model name or repository link")
             repository, revision, filename = reference_parts(reference)
             path = self.snapshot(repository, revision=revision, filename=filename)
             receipt = json.loads((path / ".turboforge-model.json").read_text(encoding="utf-8"))
@@ -208,25 +208,25 @@ class ModelResolver:
         from .backends.hf_quantization import quant_method,check_packed
         if quant_method(inspection.config) in ("awq", "gptq"):
             if not self.hf_mode:
-                raise ValueError("AWQ/GPTQ 需要选择 HF 原生保留路线，不能直接交给 NInfer")
+                raise ValueError("AWQ/GPTQ must use the HF native retention route and cannot be handed directly to NInfer")
             check_packed(inspection.config)
         if inspection.input_kind == InputKind.NVFP4 and not inspection.quantization.get("nvfp4_layout_verified"):
-            raise ValueError("NVFP4 packed 权重或缩放张量不完整，已在下载原始模型前停止")
+            raise ValueError("The NVFP4 packed weights or scale tensors are incomplete; stopped before downloading the original model")
         from .gguf_standalone import can_prepare, prepare_resources
         if can_prepare(path, inspection):
-            self.emit('从 GGUF 内嵌信息生成配置与分词器，不下载原始模型权重')
+            self.emit('Generating config and tokenizer from the GGUF embedded information; original model weights are not downloaded')
             return ModelSource(prepare_resources(path, self.root), {'gguf':str(path)})
         if original_model:
             if inspection.input_kind not in (InputKind.GGUF, InputKind.NVFP4):
-                raise ValueError("原始来源目录仅适用于 GGUF/NVFP4 导入")
+                raise ValueError("The original source directory only applies to GGUF/NVFP4 import")
             base = Path(original_model).expanduser()
             if not base.exists():
                 repository, revision, filename = reference_parts(original_model)
                 if not repository or filename:
-                    raise ValueError("原始来源必须是模型文件夹或 Hugging Face 仓库链接")
+                    raise ValueError("The original source must be a model folder or a Hugging Face repository link")
                 base = self.snapshot(repository, revision=revision, resources_only=inspection.input_kind == InputKind.GGUF)
             if not base.is_dir():
-                raise ValueError("原始模型来源必须是目录")
+                raise ValueError("The original model source must be a directory")
             ModelInspector().inspect(base, metadata_only=inspection.input_kind == InputKind.GGUF)
             key = "quantized" if inspection.input_kind == InputKind.NVFP4 else "ternary" if inspection.quantization.get("ternary_pq2") else "gguf"
             return self.nvfp4_sources(base,path,inspection) if inspection.input_kind == InputKind.NVFP4 else ModelSource(base, {key:str(path)})
@@ -237,15 +237,15 @@ class ModelResolver:
             else:
                 origin = self.origin(path if path.is_dir() else path.parent, inspection.quantization)
                 if not origin:
-                    raise ValueError("此 GGUF 没有可确认的原始模型来源，无法凭文件名猜测分词器。请改为提供发布它的 Hugging Face 仓库链接。")
+                    raise ValueError("This GGUF has no confirmable original model source; the tokenizer cannot be guessed from the file name. Provide the Hugging Face repository link that published it instead.")
                 base = self.snapshot(origin, resources_only=True)
             key = "ternary" if inspection.quantization.get("ternary_pq2") else "gguf"
             return ModelSource(base, {key: str(path)})
         if inspection.input_kind == InputKind.NVFP4:
             origin = self.origin(path)
             if not origin:
-                raise ValueError("此 NVFP4 缺少原始模型来源，请提供其 Hugging Face 仓库链接以自动获取来源元数据")
-            self.emit("NVFP4 导入需要原始高精度嵌入，将自动获取明确标注的原始检查点")
+                raise ValueError("This NVFP4 lacks an original model source; provide its Hugging Face repository link to fetch the source metadata automatically")
+            self.emit("NVFP4 import needs the original high-precision embedding; the explicitly labeled original checkpoint will be fetched automatically")
             return self.nvfp4_sources(self.snapshot(origin),path,inspection)
         directory = path if path.is_dir() else path.parent
         needs_processor = self.hf_mode and inspection.architecture == "Qwen3_5ForConditionalGeneration" and any(not (directory/name).is_file() for name in ("preprocessor_config.json","video_preprocessor_config.json"))
@@ -253,7 +253,7 @@ class ModelResolver:
             path = path if path.is_dir() else path.parent
             origin = self.origin(path, allow_self=self.hf_mode)
             if not origin:
-                raise ValueError("此模型缺少分词器或处理器配置且未声明来源，请提供其 Hugging Face 仓库链接")
+                raise ValueError("This model lacks a tokenizer or processor config and declares no source; provide its Hugging Face repository link")
             resources = self.snapshot(origin, resources_only=True)
             # Keep source immutable; use hard links on the same drive rather than
             # duplicating all weights. Cross-drive copying is explicit and checked.
@@ -269,7 +269,7 @@ class ModelResolver:
                             shutil.copy2(item, hydrated / item.name)
                     except OSError:
                         if shutil.disk_usage(hydrated).free < item.stat().st_size:
-                            raise RuntimeError("跨盘准备完整模型副本时磁盘空间不足")
+                            raise RuntimeError("Insufficient disk space while preparing a full model copy across drives")
                         shutil.copy2(item, hydrated / item.name)
             for item in resources.iterdir():
                 if item.name in _RESOURCES and not (hydrated / item.name).exists():

@@ -19,14 +19,14 @@ def evaluation_text(benchmark: dict, output: Path) -> tuple[str | None, dict]:
         identity = {"dataset": "Salesforce/wikitext", "configuration": "wikitext-2-raw-v1",
                     "revision": WIKITEXT_REVISION, "split": "test",
                     "token_limit": AUTO_EVALUATION_TOKENS,
-                    "note": "固定测试集开头最多 2048 token；独立于默认 train 校准，不代表全任务能力"}
+                    "note": "At most the first 2048 tokens of the pinned test set; independent of the default train calibration and not representative of every task's ability"}
     elif benchmark.get("perplexity_text"):
         text = Path(benchmark["perplexity_text"]).read_text(encoding="utf-8-sig")
         identity = {"source": "user_text"}
     else:
         return None, {}
     if not text.strip():
-        raise ValueError("质量评测语料为空")
+        raise ValueError("The quality evaluation corpus is empty")
     identity["text_sha256"] = hashlib.sha256(text.encode()).hexdigest()
     write_json_atomic(output / "evaluation.json", identity)
     return text, identity

@@ -22,7 +22,7 @@ def test_bundled_windows_wheels_have_verified_content_and_licenses():
 def test_corrupt_wheel_is_never_installed():
     with (patch.object(environment.os,'name','nt'),patch.object(environment.subprocess,'run',return_value=SimpleNamespace(stdout='3.10')),
           patch('turboforge.manifest.file_sha256',return_value='corrupt'),patch('turboforge.bootstrap.run') as install):
-        with pytest.raises(RuntimeError,match='校验失败'):
+        with pytest.raises(RuntimeError,match='failed verification'):
             environment.install_pcre(Path('python.exe'),lambda _:None)
         install.assert_not_called()
 

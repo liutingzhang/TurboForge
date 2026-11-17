@@ -53,22 +53,22 @@ def compile_entries() -> list[dict]:
             continue
         key = cells[0].strip("`")
         if key in refs:
-            add(key, cells[1], cells[1] + "。下一步：" + cells[2], "errors", refs[key], [key])
+            add(key, cells[1], cells[1] + ". Next step: " + cells[2], "errors", refs[key], [key])
         elif re.fullmatch(r"runtime\.[a-z_.]+", key):
-            add(key, cells[1].removeprefix("拟新增："), cells[2], "errors", [diagnostics.relative_to(ROOT).as_posix()], [key])
+            add(key, cells[1].removeprefix("Proposed: "), cells[2], "errors", [diagnostics.relative_to(ROOT).as_posix()], [key])
     field_source = ROOT / "docs/AI_ASSISTANT_FIELDS.md"
     field_aliases = set()
     for line in field_source.read_text(encoding="utf-8").splitlines():
         cells = [c.strip() for c in line.strip().split("|")[1:-1]]
         if cells and cells[0].startswith("field."):
             key, names, explanation, constraints, topic = cells
-            aliases = names.split("、")
+            aliases = [alias.strip() for alias in names.split(";")]
             field_aliases.update(aliases)
-            add(key, names, explanation + "。默认/约束：" + constraints, topic,
+            add(key, names, explanation + ". Default/constraints: " + constraints, topic,
                 [field_source.relative_to(ROOT).as_posix()], aliases)
         elif cells and cells[0].startswith("state."):
             key, title, explanation, launch = cells
-            add(key, title, explanation + "。启动：" + launch, "serving" if key.startswith("state.server") else "errors",
+            add(key, title, explanation + ". Launch: " + launch, "serving" if key.startswith("state.server") else "errors",
                 [field_source.relative_to(ROOT).as_posix()], title.split(" / "))
     for path in (ROOT / "web/src/App.tsx", ROOT / "web/src/components/ConfigPanel.tsx"):
         labels = set(re.findall(r'<Field\b[^>]*?\blabel="([^"]+)"', path.read_text(encoding="utf-8")))
@@ -79,13 +79,13 @@ def compile_entries() -> list[dict]:
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_param" and len(node.args) >= 3:
             key, title, kind = (ast.literal_eval(value) for value in node.args[:3])
             kwargs = {kw.arg: ast.literal_eval(kw.value) for kw in node.keywords}
-            add("parameter." + key, title, kwargs.get("help_", "") + "。参数类型：" + kind +
-                "；默认取当前元数据/处理器计算结果，不推测缺失值。", "calibration", [meta.relative_to(ROOT).as_posix()], [title, key])
+            add("parameter." + key, title, kwargs.get("help_", "") + ". Parameter type: " + kind +
+                "; the default comes from current metadata/processor results — missing values are never guessed.", "calibration", [meta.relative_to(ROOT).as_posix()], [title, key])
     precheck = ROOT / "src/turboforge/precheck.py"
-    purposes = {"quantized":"已有 NVFP4 检查点，需匹配生产者布局", "gguf":"已量化 GGUF 的完整文件与分片",
-        "ternary":"已发布且匹配几何的 PQ2_0 三值来源，不训练新权重", "imatrix":"与当前模型张量匹配的重要性矩阵",
-        "engram":"指定架构要求的 Engram 表", "ngram":"支持架构的 n-gram 表，未提供时按真实路线处理",
-        "mtp":"与当前模型兼容的外部 MTP 组件，不重新训练", "dflash2":"带明确兼容声明的 DFlash2 检查点，不等同于普通 DFlash"}
+    purposes = {"quantized":"An existing NVFP4 checkpoint; it must match the producer layout", "gguf":"The complete file and shards of an already-quantized GGUF",
+        "ternary":"A published PQ2_0 ternary source with matching geometry; no new weights are trained", "imatrix":"An importance matrix matching the current model tensors",
+        "engram":"The Engram table required by the specified architecture", "ngram":"An n-gram table for a supported architecture; when absent, the real route is used",
+        "mtp":"An external MTP component compatible with the current model; it is not retrained", "dflash2":"A DFlash2 checkpoint with an explicit compatibility declaration; it is not the same as plain DFlash"}
     sources = {}
     for node in ast.walk(ast.parse(precheck.read_text(encoding="utf-8-sig"))):
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
@@ -96,9 +96,9 @@ def compile_entries() -> list[dict]:
         elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name) and target.value.id == "optional" and isinstance(target.slice, ast.Constant):
             sources[target.slice.value] = ast.literal_eval(node.value)
     for key, info in sources.items():
-        add("source." + key, info["label"], purposes[key] + "。默认不提供；仅在当前配方/功能需要时补齐，实际来源与形状须通过后端校验。",
+        add("source." + key, info["label"], purposes[key] + ". Not provided by default; supply only when the current recipe/feature needs it. The actual source and shapes must pass backend validation.",
             "speculation" if key in ("mtp", "dflash2") else "input", [precheck.relative_to(ROOT).as_posix()],
-            [info["label"], key, "来源 · " + key, "来源 " + key])
+            [info["label"], key, "Source · " + key, "Source " + key])
     expected = {f"{letter}{i:02}" for letter in TOPICS for i in range(1, 11)} | set(refs)
     ids = [e["id"] for e in entries]
     if len(ids) != len(set(ids)) or not expected.issubset(ids):

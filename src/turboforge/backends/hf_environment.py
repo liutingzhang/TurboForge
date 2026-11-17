@@ -18,11 +18,11 @@ def bootstrap_python(root: Path, emit) -> Path:
     target=Path(os.environ['LOCALAPPDATA'])/'NInferTurboForge/Python31318'
     python=target/'python.exe'
     if not python.is_file():
-        emit('为免编译依赖自动准备带安全补丁的 Python 3.13.18；不修改系统 PATH')
+        emit('Automatically preparing security-patched Python 3.13.18 for build-free dependencies; the system PATH is not modified')
         script=Path(__file__).parents[1]/'data/install_hf_python.ps1'
         run(['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(script),str(Path(__file__).parents[3]),str(root/'downloads')],emit)
     probe=subprocess.run([str(python),'-c','import sys,struct; assert (3,13,18) <= sys.version_info < (3,14); assert struct.calcsize("P") == 8'],capture_output=True,text=True,env=child_environment())
-    if probe.returncode: raise RuntimeError('独立 Python 3.13 验证失败：'+probe.stderr[-1000:])
+    if probe.returncode: raise RuntimeError('Standalone Python 3.13 verification failed: '+probe.stderr[-1000:])
     return python
 
 
@@ -33,9 +33,9 @@ def install_pcre(python: Path, emit) -> None:
     result=subprocess.run([str(python),'-c','import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'],capture_output=True,text=True,check=True,env=child_environment())
     version=tuple(map(int,result.stdout.strip().split('.')))
     if version not in WHEELS:
-        raise RuntimeError('已有 HF 环境的 Python 版本缺少免编译依赖，请使用新的 TURBOFORGE_HOME 重新准备')
+        raise RuntimeError('The existing HF environment Python version lacks build-free dependencies; prepare again with a new TURBOFORGE_HOME')
     name,digest=WHEELS[version]
     wheel=Path(__file__).parents[1]/'data/hf-wheels'/name
     if not wheel.is_file() or file_sha256(wheel) != digest:
-        raise RuntimeError('内置 PyPcre wheel 缺失或校验失败，拒绝执行；请重新解压完整发布包')
+        raise RuntimeError('The bundled PyPcre wheel is missing or failed verification; execution refused. Re-extract the complete release package')
     run([str(python),'-m','pip','install','--no-deps',str(wheel)],emit)

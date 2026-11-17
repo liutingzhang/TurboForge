@@ -51,7 +51,7 @@ class SessionStore:
             session = self.sessions.get(token or "")
             if session is None:
                 if len(self.sessions) >= 256:
-                    raise AssistantError("session_limit", "本机助手会话已满，请稍后重试", 429)
+                    raise AssistantError("session_limit", "Local assistant sessions are full; try again shortly", 429)
                 session = Session(secrets.token_urlsafe(32), secrets.token_urlsafe(32), default)
                 self.sessions[session.id] = session
             if session.tested_config is not None and now - session.tested_config[2] > 300:
@@ -66,9 +66,9 @@ class SessionStore:
             if identifier is not None:
                 conversation = session.conversations.get(identifier)
                 if conversation is None:
-                    raise AssistantError("conversation_missing", "对话已过期或不属于本会话，请新建对话", 404)
+                    raise AssistantError("conversation_missing", "Conversation expired or does not belong to this session; start a new conversation", 404)
                 if conversation.boundary != boundary:
-                    raise AssistantError("context_changed", "模型、服务或任务已变化，请新建对话，旧答案仍属于旧任务", 409)
+                    raise AssistantError("context_changed", "The model, service, or build changed; start a new conversation. Old answers still belong to the old build", 409)
                 return conversation
             if len(session.conversations) >= 20:
                 del session.conversations[next(iter(session.conversations))]
@@ -81,9 +81,9 @@ class SessionStore:
             self._expire_cancellations(session)
             if identifier and identifier in session.cancelled_requests:
                 del session.cancelled_requests[identifier]
-                raise AssistantError("cancelled", "已停止读取回答；上游仍可能计费", 409)
+                raise AssistantError("cancelled", "Stopped reading the answer; the upstream may still bill", 409)
             if session.requests or sum(len(s.requests) for s in self.sessions.values()) >= 4:
-                raise AssistantError("busy", "助手正在处理其他请求，请等待或停止当前回答", 429)
+                raise AssistantError("busy", "The assistant is handling another request; wait or stop the current answer", 429)
             identifier = identifier or secrets.token_urlsafe(18)
             control = RequestControl()
             session.requests[identifier] = control
@@ -98,13 +98,13 @@ class SessionStore:
 
     def cancel(self, session: Session, identifier: str):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", identifier):
-            raise AssistantError("chat_input", "请求标识无效")
+            raise AssistantError("chat_input", "Invalid request identifier")
         with self.lock:
             control = session.requests.get(identifier)
             if control is None:
                 self._expire_cancellations(session)
                 if identifier not in session.cancelled_requests and len(session.cancelled_requests) >= 128:
-                    raise AssistantError("cancel_limit", "取消请求过多，请稍后重试", 429)
+                    raise AssistantError("cancel_limit", "Too many cancellation requests; try again shortly", 429)
                 session.cancelled_requests[identifier] = time.monotonic()
         if control is not None:
             control.interrupt()

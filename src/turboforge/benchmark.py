@@ -180,7 +180,7 @@ class BenchmarkEngine:
         if text_file is None and corpus_manifest is None:
             raise ValueError("perplexity needs --text or --corpus input")
         if not 1 <= stride < context:
-            raise ValueError("PPL stride 必须大于 0 且小于 context")
+            raise ValueError("PPL stride must be greater than 0 and smaller than context")
         command = [str(exe), str(artifact.expanduser().resolve()), "--context", str(context), "--stride", str(stride)]
         if text_file is not None:
             command += ["--text", str(text_file.expanduser().resolve())]

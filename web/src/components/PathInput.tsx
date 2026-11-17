@@ -29,10 +29,10 @@ export default function PathInput({ value, onChange, placeholder, label, kind = 
     <Input data-ai-ignore value={value} aria-label={label} placeholder={placeholder} allowClear onChange={(e) => onChange(e.target.value)} />
     <Space className="path-actions">
       <Button size="small" icon={<FolderOpenOutlined />} loading={picking} onClick={() => pick(kind === 'file' ? 'file' : 'directory')}>
-        {kind === 'file' ? '选择文件' : '选择文件夹'}
+        {kind === 'file' ? 'Select file' : 'Select folder'}
       </Button>
-      {kind === 'model' && <Button size="small" disabled={picking} onClick={() => pick('file')}>选择 GGUF 文件</Button>}
-      <span className="muted">{kind === 'file' ? '选择文件，或手动填写文件路径' : kind === 'model' ? '选择模型目录 / GGUF 文件，或填写路径 / 仓库链接' : '选择文件夹，或手动填写目录路径'}</span>
+      {kind === 'model' && <Button size="small" disabled={picking} onClick={() => pick('file')}>Select GGUF file</Button>}
+      <span className="muted">{kind === 'file' ? 'Select a file, or enter the file path manually' : kind === 'model' ? 'Select a model directory / GGUF file, or enter a path / repository link' : 'Select a folder, or enter the directory path manually'}</span>
     </Space>
   </>;
 }

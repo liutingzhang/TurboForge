@@ -84,7 +84,7 @@ def auto_select(config: ForgeConfig, inspection: ModelInspection,
         chosen = gguf[0]
         diagnostics.append(Diagnostic(
             "auto-selected-gguf",
-            ("从 GGUF 解码并重编码为 Q8_0；配置和分词器可从内嵌元数据生成，质量未验证。"
+            ("Decodes from GGUF and re-encodes as Q8_0; config and tokenizer can be generated from embedded metadata, quality is not validated."
              if chosen.recipe == 'qwen3_5_gguf_standalone' else
              f"A GGUF source was supplied, so the default is {chosen.recipe}: blocks are imported verbatim at the GGUF's own precision"),
             Severity.INFO,
@@ -178,7 +178,7 @@ def source_diagnostics(config: ForgeConfig) -> list[Diagnostic]:
             try:
                 GGUFAdapter().inspect(path)
             except (ValueError, OSError) as exc:
-                diagnostics.append(Diagnostic("gguf-source-invalid", f"GGUF 来源无法读取：{exc}", Severity.ERROR))
+                diagnostics.append(Diagnostic("gguf-source-invalid", f"The GGUF source cannot be read: {exc}", Severity.ERROR))
     return diagnostics
 
 

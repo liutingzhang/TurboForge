@@ -147,7 +147,7 @@ export default function App() {
       if (sequence !== checkSequence.current) return;
       setChecked(result);
       if (result.ready) { setStage(1); setBitChoice('auto'); setQualityEnabled(false); setBuildId(null); setBuildStatus(null); setPlan(null); setPerformance(null); setQuality(null); sessionStorage.removeItem('turboforge.build'); patch({jailbreak:'none', jailbreak_params:{}, target:result.requires_explicit_target ? '' : 'auto', sources:{}, benchmark:{}, quantization:{}, runtime:{...config.runtime,speculative:'auto',...(result.recommended_max_context ? {max_context:result.recommended_max_context} : {})}, run_benchmark:true}); }
-    } catch (error) { if (sequence === checkSequence.current) setChecked({ready:false, message:`模型检查未完成：${(error as Error).message}`}); }
+    } catch (error) { if (sequence === checkSequence.current) setChecked({ready:false, message:`Model check incomplete: ${(error as Error).message}`}); }
     finally { if (sequence === checkSequence.current) setChecking(false); }
   };
   const chooseOriginal = async () => {
@@ -344,10 +344,10 @@ export default function App() {
           setBuilding(false);
         }
       } catch (error) {
-        if (!cancelled) setPollError(`进度连接中断：${(error as Error).message}。正在重新连接，请勿重复开始转换。`);
+        if (!cancelled) setPollError(`Progress connection interrupted: ${(error as Error).message}. Reconnecting; do not start the conversion again.`);
         if (!cancelled && (error as Error).message === 'unknown build id') {
           setBuilding(false);
-          setPollError('本机服务已重启，任务记录不在内存中。请查看输出目录的 manifest.json 和 logs；更换空目录后可重新构建。');
+          setPollError('The local service restarted and the task record is no longer in memory. Check manifest.json and logs in the output directory; you can rebuild after choosing a new empty directory.');
           sessionStorage.removeItem('turboforge.build');
         }
       } finally {
@@ -402,10 +402,10 @@ export default function App() {
     && !(buildStatus?.finished && buildStatus.output_dir === config.output_dir);
   const routeInspection = needsBase ? baseInspection : inspection;
 
-  const titles = ['选择模型', '量化与越狱', '加速与验证', '转换并使用'];
+  const titles = ['Select model', 'Quantization & abliteration', 'Acceleration & validation', 'Convert & use'];
   const inputReady = Boolean(inspection?.usable && config.output_dir.trim() && !inspectLoading && !inspectError && (!needsBase || baseInspection?.usable));
   const nextReady = stage === 0 ? inputReady : Boolean(plan?.executable && !planLoading);
-  const go = (value: number) => { if (serverInUse && value < 3) {message.warning('请先停止模型服务，再开始新的转换');return;} setStage(!advanced && value < 3 ? 0 : value); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const go = (value: number) => { if (serverInUse && value < 3) {message.warning('Stop the model service before starting a new conversion');return;} setStage(!advanced && value < 3 ? 0 : value); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const displayPlan = buildStatus?.manifest?.plan ?? plan;
   const actualConfig = buildStatus?.manifest?.config ?? buildStatus?.prepared_config ?? (!advanced ? { ...config, output_dir: '' } : config);
   const actualInspection = buildStatus?.manifest?.source ?? routeInspection ?? inspection;
@@ -436,138 +436,138 @@ export default function App() {
       diagnostics:displayPlan?.diagnostics ?? []}}}>
     <div className="shell">
       <AppHeader meta={meta} />
-      {serverPollError && meta && stage !== 3 && <Notice tone="warn" title="模型服务状态暂时无法连接">正在重新连接：{serverPollError}</Notice>}
-      {activeServers.length > 0 && (stage !== 3 || activeServers.some(server => server.build_id !== buildId)) && <Notice title="本页面服务已有模型正在运行"><p>开始新转换前先释放显存；即使切换任务，也可在这里停止服务。</p><Button onClick={stopActiveServers}>停止当前模型并释放显存</Button></Notice>}
+      {serverPollError && meta && stage !== 3 && <Notice tone="warn" title="Model service status temporarily unreachable">Reconnecting: {serverPollError}</Notice>}
+      {activeServers.length > 0 && (stage !== 3 || activeServers.some(server => server.build_id !== buildId)) && <Notice title="A model from this page is already running"><p>Free VRAM before starting a new conversion; even after switching tasks, you can stop the service here.</p><Button onClick={stopActiveServers}>Stop the current model and free VRAM</Button></Notice>}
       <div className="wizard-heading">
-        <h1>选择量化与加速方案，生成可验证的本地模型</h1>
-        <p>选择待处理模型；量化模型无法识别原始来源时，还需填写原始模型目录或仓库链接。脚本自动准备依赖、引擎和输出位置，完成转换与 GPU 验证；原模型始终保留。</p>
-        <Steps current={advanced ? stage : stage === 3 ? 2 : stage} items={(advanced ? titles : ['选择模型', '确认处理方式', '转换并使用']).map((title) => ({ title }))} />
+        <h1>Choose a quantization and acceleration plan, produce a verifiable local model</h1>
+        <p>Select the model to process; when a quantized model's original source cannot be identified, also provide the original model directory or repository link. The script prepares dependencies, engine and output location automatically, then completes conversion and GPU validation; the original model is always kept.</p>
+        <Steps current={advanced ? stage : stage === 3 ? 2 : stage} items={(advanced ? titles : ['Select model', 'Confirm the plan', 'Convert & use']).map((title) => ({ title }))} />
       </div>
       <main className="workspace wizard-workspace">
         <div className="col">
-          <Panel title={advanced ? `${stage + 1}. ${titles[stage]}` : stage === 0 ? '1. 先选择模型' : stage === 1 ? '2. 确认处理方式' : '3. 转换并使用'} icon={<SettingOutlined />}>
-            {metaError && <Notice tone="bad" title="无法连接本机服务">{metaError}<br /><Button onClick={() => window.location.reload()}>重新连接</Button></Notice>}
-            {stage === 0 && <Notice title="先选模型，再确认可用的处理方式">选择本机模型，或输入 Hugging Face 的「组织/模型名」、仓库链接。首次需要联网下载；已准备好的文件自动复用，下载进度会显示在页面。</Notice>}
+          <Panel title={advanced ? `${stage + 1}. ${titles[stage]}` : stage === 0 ? '1. Select a model first' : stage === 1 ? '2. Confirm the plan' : '3. Convert & use'} icon={<SettingOutlined />}>
+            {metaError && <Notice tone="bad" title="Cannot connect to the local service">{metaError}<br /><Button onClick={() => window.location.reload()}>Reconnect</Button></Notice>}
+            {stage === 0 && <Notice title="Select a model first, then confirm the available plans">Select a local model, or enter a Hugging Face org/model name or repository link. The first run needs network downloads; prepared files are reused automatically and download progress is shown on the page.</Notice>}
             {meta ? <>
               {stage === 0 && !advanced && <>
-                <Field label="模型" required tooltip="HF / NVFP4 选目录，GGUF 选文件；也可输入组织/模型名。">
-                  <PathInput label="输入模型" kind="model" value={inputPath} onChange={chooseModel} placeholder="选择本机模型，或填写 Hugging Face 仓库链接" />
+                <Field label="Model" required tooltip="Choose a directory for HF / NVFP4, a file for GGUF; you can also enter an org/model name.">
+                  <PathInput label="Input model" kind="model" value={inputPath} onChange={chooseModel} placeholder="Select a local model, or enter a Hugging Face repository link" />
                 </Field>
-                {checked && !checked.ready && <Notice tone="warn" title={checked.action === 'provide_original' ? '需补充原始模型来源' : checked.action === 'choose_original' ? '请改用原始模型进行转换' : '模型检查未通过'}>{checked.message}
-                  {checked.action === 'provide_original' && <p>在下方选择本机原始模型目录，或填写原始模型仓库链接，然后点击「检查模型并继续」。点击「选择文件夹」可自动填入目录路径，也可以手动填写。</p>}
-                  {checked.action === 'choose_original' && <p><Button onClick={chooseOriginal}>改用原始模型文件夹</Button></p>}
+                {checked && !checked.ready && <Notice tone="warn" title={checked.action === 'provide_original' ? 'Original model source needed' : checked.action === 'choose_original' ? 'Use the original model for conversion' : 'Model check failed'}>{checked.message}
+                  {checked.action === 'provide_original' && <p>Select the local original model directory below, or enter the original model repository link, then click 'Check model and continue'. Clicking 'Select folder' fills the directory path automatically; you can also enter it manually.</p>}
+                  {checked.action === 'choose_original' && <p><Button onClick={chooseOriginal}>Use the original model folder</Button></p>}
                 </Notice>}
-                <Field label="原始模型来源" required={checked?.action === 'provide_original'} extra="待处理模型为完整原始 HF 模型时请留空。已支持的完整 GGUF 可自动生成配置与分词器，不需填写来源。其他 GGUF / NVFP4 在提示缺少来源时填写：选择含 config.json 与分词器文件的原始 HF 目录，或粘贴其仓库链接；仅含 GGUF 的目录不能作为原始来源。"><PathInput label="原始模型来源" value={originalModel} onChange={value => {checkSequence.current++; setChecking(false);setOriginalModel(value);setChecked(null);}} placeholder="本机原始模型目录路径，或 Hugging Face 仓库链接" /></Field>
-                {!!checked?.input_candidates?.length && <Field label="仓库 GGUF 文件" required><Select placeholder="选择具体精度文件" options={checked.input_candidates.map(item => ({value:item.reference,label:item.name}))} onChange={chooseModel} /></Field>}
-                <div className="wizard-actions"><Button disabled={building || checking} onClick={() => {setAdvanced(true); patch({jailbreak:'none', jailbreak_params:{}});}}>高级手动配置</Button><Button type="primary" disabled={!inputPath.trim() || building} loading={checking} onClick={checkModel}>检查模型并继续</Button></div>
+                <Field label="Original model source" required={checked?.action === 'provide_original'} extra="Leave empty when the model to process is a complete original HF model. Supported complete GGUFs generate config and tokenizer automatically and need no source. For other GGUF / NVFP4, fill this in when a missing source is flagged: select the original HF directory containing config.json and tokenizer files, or paste its repository link; a directory containing only GGUF cannot serve as the original source."><PathInput label="Original model source" value={originalModel} onChange={value => {checkSequence.current++; setChecking(false);setOriginalModel(value);setChecked(null);}} placeholder="Local original model directory path, or a Hugging Face repository link" /></Field>
+                {!!checked?.input_candidates?.length && <Field label="Repository GGUF file" required><Select placeholder="Select the specific precision file" options={checked.input_candidates.map(item => ({value:item.reference,label:item.name}))} onChange={chooseModel} /></Field>}
+                <div className="wizard-actions"><Button disabled={building || checking} onClick={() => {setAdvanced(true); patch({jailbreak:'none', jailbreak_params:{}});}}>Advanced manual configuration</Button><Button type="primary" disabled={!inputPath.trim() || building} loading={checking} onClick={checkModel}>Check model and continue</Button></div>
               </>}
               {!advanced && stage === 1 && checked?.ready && <>
                 <p className="mono path-wrap" data-ai-ignore>{inputPath}</p>
-                <Notice tone="ok" title={checked.remote ? '已选择模型仓库' : '模型检查完成'}>{checked.message}</Notice>
+                <Notice tone="ok" title={checked.remote ? 'Model repository selected' : 'Model check complete'}>{checked.message}</Notice>
                 {(checked.architecture_kind && checked.architecture_kind !== 'unknown' || checked.gpu) && <div className="chip-row">
-                  {checked.architecture_kind === 'moe' && <Chip tone="ok">MoE 混合专家</Chip>}
-                  {checked.architecture_kind === 'dense' && <Chip tone="ok">Dense 稠密</Chip>}
+                  {checked.architecture_kind === 'moe' && <Chip tone="ok">MoE mixture of experts</Chip>}
+                  {checked.architecture_kind === 'dense' && <Chip tone="ok">Dense</Chip>}
                   {checked.gpu && <Chip mono>{checked.gpu.generation} · {Math.round(checked.gpu.total_bytes / 1024 ** 3)} GB</Chip>}
-                  {checked.gpu && <Chip>{checked.scheme_order === 'native-format' ? '本卡原生格式已排到前面' : '本卡无原生低比特格式，按位宽排序'}</Chip>}
+                  {checked.gpu && <Chip>{checked.scheme_order === 'native-format' ? 'Native formats for this GPU ranked first' : 'No native low-bit format for this GPU; sorted by bit width'}</Chip>}
                 </div>}
-                {checked.runtime_engine && <Notice tone={checked.runtime_engine.compat_check ? 'warn' : 'info'} title={`后续推理建议 · ${checked.runtime_engine.label}`}>
+                {checked.runtime_engine && <Notice tone={checked.runtime_engine.compat_check ? 'warn' : 'info'} title={`Inference engine recommendation · ${checked.runtime_engine.label}`}>
                   {checked.runtime_engine.compat_check && <p><strong>{checked.runtime_engine.compat_check}</strong></p>}
                   <p>{checked.runtime_engine.reason}</p>
-                  <p className="muted">要求：{checked.runtime_engine.requirements}</p>
-                  <p className="muted">格式：{checked.runtime_engine.format} · 支持模型：{checked.runtime_engine.models}</p>
-                  <p className="muted">备选：{checked.runtime_engine.alternative}</p>
-                  <p className="muted">后续步骤：{checked.runtime_engine.steps}</p>
-                  <p className="muted">{checked.runtime_engine.advisory} <a href={checked.runtime_engine.url} target="_blank" rel="noreferrer">官方仓库 {checked.runtime_engine.url}</a></p>
+                  <p className="muted">Requirements: {checked.runtime_engine.requirements}</p>
+                  <p className="muted">Format: {checked.runtime_engine.format} · supported models: {checked.runtime_engine.models}</p>
+                  <p className="muted">Alternative: {checked.runtime_engine.alternative}</p>
+                  <p className="muted">Next steps: {checked.runtime_engine.steps}</p>
+                  <p className="muted">{checked.runtime_engine.advisory} <a href={checked.runtime_engine.url} target="_blank" rel="noreferrer">Official repository {checked.runtime_engine.url}</a></p>
                 </Notice>}
-                <h3>量化方式与位宽</h3>
-                <p className="muted">下方直接列出当前模型＋引擎已验证的全部量化方案，位宽、算法与引擎都写在选项里，由你自选;「自动推荐」只遵循该模型默认策略，不会替你改目标。可选位宽仅来自这些已适配配方，未验证的位宽不列出，所以菜单可能较短。</p>
-                <Field label="目标位宽"><Select value={bitChoice} options={[{value:'auto',label:checked.provided_sources?.length ? '按来源精度导入' : '全部位宽 · 自动推荐（保留当前模型默认质量策略）'}, ...Array.from(new Set((checked.targets ?? []).filter(t => t.available && t.bits !== null).map(t => t.bits as number))).sort((a,b) => a-b).map(bits => ({value:bits,label:`${bits} bit · 主权重精度`})), ...((checked.targets ?? []).some(t => t.available && t.bits === null) ? [{value:'source',label:'保持来源位宽'}] : [])]} onChange={value => {
+                <h3>Quantization method and bit width</h3>
+                <p className="muted">All quantization plans verified for the current model + engine are listed below, with bit width, algorithm and engine written into each option for you to choose; 'Auto recommendation' only follows this model's default policy and never changes the target for you. Selectable bit widths come only from these adapted recipes; unverified widths are not listed, so the menu may be short.</p>
+                <Field label="Target bit width"><Select value={bitChoice} options={[{value:'auto',label:checked.provided_sources?.length ? 'Import at source precision' : 'All bit widths · auto recommendation (keeps the model default quality policy)'}, ...Array.from(new Set((checked.targets ?? []).filter(t => t.available && t.bits !== null).map(t => t.bits as number))).sort((a,b) => a-b).map(bits => ({value:bits,label:`${bits} bit · main-weight precision`})), ...((checked.targets ?? []).some(t => t.available && t.bits === null) ? [{value:'source',label:'Keep source bit width'}] : [])]} onChange={value => {
                   setBitChoice(value); selectTarget(checked.requires_explicit_target && value === 'auto' ? '' : value === 'auto' ? 'auto' : checked.targets?.find(t => t.available && t.bits === (value === 'source' ? null : value))?.value ?? '');
                 }} /></Field>
-                <Field label="量化方案"><Select placeholder="选择与来源布局匹配的方案" value={config.target || undefined} options={[...(bitChoice === 'auto' && !checked.requires_explicit_target ? [{value:'auto',label:'自动推荐'}] : []), ...(checked.targets ?? []).filter(t => bitChoice === 'auto' || t.bits === (bitChoice === 'source' ? null : bitChoice)).map(t => ({value:t.value,label:t.label + (t.bits !== null ? ` · ${t.bits}bit` : ' · 来源位宽') + (t.engine === 'ninfer' ? ' · NInfer' : ' · HF') + (t.gpu_note ? ` · ${t.gpu_note}` : '') + (t.missing_sources?.length ? '（需补充来源）' : ''),disabled:!t.available}))]} onChange={selectTarget} /></Field>
-                {checked.requires_explicit_target && <Notice title="请明确选择量化路线">按检查点布局和目标格式选择方案；程序不会猜测生产工具或自动切换推理引擎。</Notice>}
-                {(checked.targets?.find(t => t.value === config.target)?.required_sources ?? []).filter(name => !checked.provided_sources?.includes(name)).map(name => <Field key={name} label={checked.source_fields?.[name]?.label ?? name} required><PathInput label={`来源 ${name}`} kind={checked.source_fields?.[name]?.kind ?? 'file'} value={config.sources[name] ?? ''} onChange={value => patch({sources:{...config.sources,[name]:value}})} /></Field>)}
-                <p className="muted">只列出此模型可用的位宽。嵌入、输出头等可能保留更高精度；主位宽、整模型 bpw 与文件大小不同。</p>
-                {!!checked.unsupported?.length && <Collapse ghost items={[{key:'unsupported', label:'格式与位宽的支持范围', children:checked.unsupported.map(item => <p key={item.name}>{item.reason}</p>)}]} />}
-                {hfSelected && <Collapse ghost items={[{key:'hf-options',label:'调整校准与推理后端（可选，默认自动准备）',children:<>
-                  <Notice title="HF 原生 AWQ/GPTQ 路线">保留原生打包格式，使用独立 GPTQModel 引擎。首次自动准备 CUDA 13 环境，需要 NVIDIA 580+ 驱动。本机 Qwen3.5-0.8B 的 GPTQ 4-bit 已通过有限质量验收；其他模型与位宽以本次验证报告为准。</Notice>
+                <Field label="Quantization plan"><Select placeholder="Select the plan matching the source layout" value={config.target || undefined} options={[...(bitChoice === 'auto' && !checked.requires_explicit_target ? [{value:'auto',label:'Auto recommendation'}] : []), ...(checked.targets ?? []).filter(t => bitChoice === 'auto' || t.bits === (bitChoice === 'source' ? null : bitChoice)).map(t => ({value:t.value,label:t.label + (t.bits !== null ? ` · ${t.bits}bit` : ' · source bit width') + (t.engine === 'ninfer' ? ' · NInfer' : ' · HF') + (t.gpu_note ? ` · ${t.gpu_note}` : '') + (t.missing_sources?.length ? ' (source needed)' : ''),disabled:!t.available}))]} onChange={selectTarget} /></Field>
+                {checked.requires_explicit_target && <Notice title="Choose a quantization route explicitly">Choose the plan by checkpoint layout and target format; the program never guesses the producer tool or switches the inference engine automatically.</Notice>}
+                {(checked.targets?.find(t => t.value === config.target)?.required_sources ?? []).filter(name => !checked.provided_sources?.includes(name)).map(name => <Field key={name} label={checked.source_fields?.[name]?.label ?? name} required><PathInput label={`Source ${name}`} kind={checked.source_fields?.[name]?.kind ?? 'file'} value={config.sources[name] ?? ''} onChange={value => patch({sources:{...config.sources,[name]:value}})} /></Field>)}
+                <p className="muted">Only bit widths available for this model are listed. Embeddings, output heads etc. may keep higher precision; main bit width, whole-model bpw and file size are different things.</p>
+                {!!checked.unsupported?.length && <Collapse ghost items={[{key:'unsupported', label:'Format and bit-width support scope', children:checked.unsupported.map(item => <p key={item.name}>{item.reason}</p>)}]} />}
+                {hfSelected && <Collapse ghost items={[{key:'hf-options',label:'Adjust calibration and inference backend (optional; prepared automatically by default)',children:<>
+                  <Notice title="HF native AWQ/GPTQ route">Keeps the native packed format and uses the separate GPTQModel engine. The first run prepares a CUDA 13 environment automatically and needs an NVIDIA 580+ driver. GPTQ 4-bit for Qwen3.5-0.8B passed limited quality acceptance on this machine; other models and bit widths follow this run's validation report.</Notice>
                   {config.target !== 'hf_packed_import' && <>
-                    <Field label="校准语料"><PathInput label="量化校准文本" kind="file" value={String(config.quantization?.calibration_file ?? '')} onChange={value => patch({quantization:{...config.quantization,calibration_file:value}})} placeholder="可选；留空自动下载 WikiText-2" /></Field>
-                    <Field label="分组大小"><Select value={Number(config.quantization?.group_size ?? 128)} options={[32,64,128].map(value => ({value,label:String(value)}))} onChange={value => patch({quantization:{...config.quantization,group_size:value}})} /></Field>
-                    <Collapse ghost items={[{key:'hf-calibration',label:'调整校准样本与长度（可选）',children:<>
-                      <Field label="校准样本数"><InputNumber min={1} max={4096} value={Number(config.quantization?.samples ?? 128)} onChange={value => {if(value !== null) patch({quantization:{...config.quantization,samples:value}});}} /></Field>
-                      <Field label="每样本 token"><InputNumber min={32} max={4096} value={Number(config.quantization?.sequence_length ?? 512)} onChange={value => {if(value !== null) patch({quantization:{...config.quantization,sequence_length:value}});}} /></Field>
+                    <Field label="Calibration corpus"><PathInput label="Quantization calibration text" kind="file" value={String(config.quantization?.calibration_file ?? '')} onChange={value => patch({quantization:{...config.quantization,calibration_file:value}})} placeholder="Optional; leave empty to download WikiText-2 automatically" /></Field>
+                    <Field label="Group size"><Select value={Number(config.quantization?.group_size ?? 128)} options={[32,64,128].map(value => ({value,label:String(value)}))} onChange={value => patch({quantization:{...config.quantization,group_size:value}})} /></Field>
+                    <Collapse ghost items={[{key:'hf-calibration',label:'Adjust calibration samples and length (optional)',children:<>
+                      <Field label="Calibration samples"><InputNumber min={1} max={4096} value={Number(config.quantization?.samples ?? 128)} onChange={value => {if(value !== null) patch({quantization:{...config.quantization,samples:value}});}} /></Field>
+                      <Field label="Tokens per sample"><InputNumber min={32} max={4096} value={Number(config.quantization?.sequence_length ?? 512)} onChange={value => {if(value !== null) patch({quantization:{...config.quantization,sequence_length:value}});}} /></Field>
                     </>}]} />
                   </>}
-                  <Field label="HF 推理后端"><Select value={String(config.quantization?.backend ?? 'auto')} options={[{value:'auto',label:'自动优化（推荐，首次编译后缓存）'},{value:'torch',label:'Torch 兼容后端'}]} onChange={value => patch({quantization:{...config.quantization,backend:value}})} /></Field>
-                  <p className="muted">校准以 FP16、batch=1 执行，样本不重叠，至少需要 {Number(config.quantization?.samples ?? 128)*Number(config.quantization?.sequence_length ?? 512)} token；校准与评测请使用独立语料。激活放 CPU、已处理层卸载到磁盘，会增加 RAM、磁盘和转换时间；低位宽仍需质量验收。</p>
+                  <Field label="HF inference backend"><Select value={String(config.quantization?.backend ?? 'auto')} options={[{value:'auto',label:'Auto optimization (recommended; cached after the first compile)'},{value:'torch',label:'Torch compatible backend'}]} onChange={value => patch({quantization:{...config.quantization,backend:value}})} /></Field>
+                  <p className="muted">Calibration runs in FP16 with batch=1 and non-overlapping samples, needing at least {Number(config.quantization?.samples ?? 128)*Number(config.quantization?.sequence_length ?? 512)} tokens; use separate corpora for calibration and evaluation. Activations stay on the CPU and processed layers offload to disk, increasing RAM, disk and conversion time; low bit widths still need quality acceptance.</p>
                 </>}]} />}
-                <h3>权重处理</h3>
-                <Field label="越狱方式"><Select value={config.jailbreak} options={[{value:'none', label:'保持现有行为（推荐，已有越狱模型也选此项）'}, ...(checked.can_edit_weights ? [{value:'abliteration',label:'Abliteration · 自动校准拒绝方向'}] : [])]} onChange={value => patch({jailbreak:value,jailbreak_params:{}})} /></Field>
-                <p className="muted">越狱会改变模型行为，本身不保证提速；Heretic 的交互处理仍在高级配置中。</p>
-                <h3>解码加速</h3>
-                <Field label="推测解码"><Select value={config.runtime.speculative ?? 'auto'} options={Array.from(new Set([...specAvailable, selectedSpec])).map(value => ({value, disabled:!specAvailable.includes(value), label:!specAvailable.includes(value) ? `${value.toUpperCase()}（${hfSelected ? 'HF 路线不执行推测头' : '缺少组件来源'}）` : ({auto:'自动使用兼容组件',none:'关闭推测解码',mtp:config.sources.mtp ? '外部 MTP（转换时验证）' : 'MTP · 已检测到组件',dflash2:config.sources.dflash2 ? '外部 DFlash2（转换时验证）' : 'DFlash2 · 已检测到组件'} as Record<string,string>)[value]}))} onChange={value => patch({runtime:{...config.runtime,speculative:value}})} /></Field>
-                <p className="muted">{hfSelected ? 'HF 路线无损归档自带 MTP/DFlash2，但当前服务不执行这些头。要保留推测加速请选择 NInfer；仅需归档时请明确关闭推测。' : '自带 MTP/DFlash2 自动保留；转换后校验实际权重绑定与共享输出头。只封装已有组件，不训练缺失的头。'}</p>
-                {!hfSelected && !!Object.keys(checked.optional_sources ?? {}).length && <Collapse ghost items={[{key:'companions',label:'添加已有的兼容组件（可选）',children:Object.entries(checked.optional_sources ?? {}).map(([name,field]) => <Field key={name} label={field.label}><PathInput label={`来源 ${name}`} kind={field.kind} value={config.sources[name] ?? ''} onChange={value => patch({sources:{...config.sources,[name]:value}})} /></Field>)}]} />}
-                {!specSelectionValid && <Notice tone="warn">{hfSelected ? '此模型自带推测头，当前 HF 引擎不能执行。请选择 NInfer 路线保留加速，或明确关闭推测后仅保留头文件。不会自动降级。' : '所选推测组件缺少来源，请补全文件，或明确改选自动/关闭。'}
-                  {hfSelected && checked.targets?.some(target => target.engine === 'ninfer' && target.available) && <p><Button onClick={() => {setBitChoice('auto');selectTarget('auto');patch({runtime:{...config.runtime,speculative:'auto'}});}}>改用 NInfer，自动保留并使用兼容推测头</Button></p>}
+                <h3>Weight processing</h3>
+                <Field label="Abliteration method"><Select value={config.jailbreak} options={[{value:'none', label:'Keep existing behavior (recommended; also choose this for already-abliterated models)'}, ...(checked.can_edit_weights ? [{value:'abliteration',label:'Abliteration · calibrates the refusal direction automatically'}] : [])]} onChange={value => patch({jailbreak:value,jailbreak_params:{}})} /></Field>
+                <p className="muted">Abliteration changes model behavior and does not itself guarantee speedup; the interactive Heretic processing remains in advanced configuration.</p>
+                <h3>Decode acceleration</h3>
+                <Field label="Speculative decoding"><Select value={config.runtime.speculative ?? 'auto'} options={Array.from(new Set([...specAvailable, selectedSpec])).map(value => ({value, disabled:!specAvailable.includes(value), label:!specAvailable.includes(value) ? `${value.toUpperCase()} (${hfSelected ? 'the HF route does not run speculative heads' : 'component source missing'})` : ({auto:'Use compatible components automatically',none:'Speculative decoding off',mtp:config.sources.mtp ? 'External MTP (validated at conversion)' : 'MTP · component detected',dflash2:config.sources.dflash2 ? 'External DFlash2 (validated at conversion)' : 'DFlash2 · component detected'} as Record<string,string>)[value]}))} onChange={value => patch({runtime:{...config.runtime,speculative:value}})} /></Field>
+                <p className="muted">{hfSelected ? 'The HF route archives bundled MTP/DFlash2 losslessly, but the current service does not run these heads. To keep speculative acceleration choose NInfer; for archiving only, explicitly turn speculation off.' : 'Bundled MTP/DFlash2 is retained automatically; after conversion the actual weight bindings and shared output head are verified. Only existing components are packaged; missing heads are never trained.'}</p>
+                {!hfSelected && !!Object.keys(checked.optional_sources ?? {}).length && <Collapse ghost items={[{key:'companions',label:'Add existing compatible components (optional)',children:Object.entries(checked.optional_sources ?? {}).map(([name,field]) => <Field key={name} label={field.label}><PathInput label={`Source ${name}`} kind={field.kind} value={config.sources[name] ?? ''} onChange={value => patch({sources:{...config.sources,[name]:value}})} /></Field>)}]} />}
+                {!specSelectionValid && <Notice tone="warn">{hfSelected ? 'This model ships speculative heads that the current HF engine cannot run. Choose the NInfer route to keep acceleration, or explicitly turn speculation off and keep only the head files. No automatic downgrade.' : 'The selected speculative component lacks a source; supply the file, or explicitly switch to auto/off.'}
+                  {hfSelected && checked.targets?.some(target => target.engine === 'ninfer' && target.available) && <p><Button onClick={() => {setBitChoice('auto');selectTarget('auto');patch({runtime:{...config.runtime,speculative:'auto'}});}}>Switch to NInfer; keep and use compatible speculative heads automatically</Button></p>}
                 </Notice>}
-                <h3>性能与质量验收</h3>
-                <Field label="测试速度"><Switch checked={config.run_benchmark} disabled={qualityEnabled} onChange={value => patch({run_benchmark:value})} /></Field>
-                <Field label="质量门禁"><Switch checked={qualityEnabled} disabled={config.target === 'hf_packed_import'} onChange={value => {setQualityEnabled(value);patch({run_benchmark:true, benchmark:value ? {...config.benchmark,...(hfSelected && !config.benchmark.perplexity_text ? {auto_quality:true} : {}),max_ppl_relative_increase:0.1} : {}});}} /></Field>
+                <h3>Performance and quality acceptance</h3>
+                <Field label="Benchmark speed"><Switch checked={config.run_benchmark} disabled={qualityEnabled} onChange={value => patch({run_benchmark:value})} /></Field>
+                <Field label="Quality gate"><Switch checked={qualityEnabled} disabled={config.target === 'hf_packed_import'} onChange={value => {setQualityEnabled(value);patch({run_benchmark:true, benchmark:value ? {...config.benchmark,...(hfSelected && !config.benchmark.perplexity_text ? {auto_quality:true} : {}),max_ppl_relative_increase:0.1} : {}});}} /></Field>
                 {qualityEnabled ? <>
-                  {hfSelected ? <Notice title="自动准备独立质量评测">默认下载固定版本 WikiText-2 test，取开头最多 2048 token，与 train 校准分开。自动使用本次处理后、量化前的权重，在 CPU 上评分；需要额外 RAM 和时间。通用英文语料不替代你的中文、代码等任务验证。</Notice> : <Notice tone="warn">此路线需要同一处理阶段的高精度 NInfer 对照文件。程序不会拿低精度产物自证无损；没有对照时只能确认可运行和所测速率。</Notice>}
-                  <Field label="评测语料" required={!hfSelected}><PathInput label="质量评测语料" kind="file" value={String(config.benchmark.perplexity_text ?? '')} onChange={value => {const benchmark = {...config.benchmark}; delete benchmark.perplexity_text; delete benchmark.auto_quality; patch({benchmark:{...benchmark,...(value ? {perplexity_text:value} : hfSelected ? {auto_quality:true} : {})}});}} placeholder={hfSelected ? '可选；留空自动准备独立测试集' : '选择 UTF-8 文本'} /></Field>
-                  {!hfSelected && <Field label="对照模型" required><PathInput label="对照 NInfer 模型" kind="file" value={String(config.benchmark.baseline_artifact ?? '')} onChange={value => patch({benchmark:{...config.benchmark,baseline_artifact:value}})} placeholder="同一处理阶段的高精度 .ninfer" /></Field>}
-                  <Field label="允许 PPL 增幅"><InputNumber min={0} max={100} suffix="%" value={Number(config.benchmark.max_ppl_relative_increase ?? .1)*100} onChange={value => patch({benchmark:{...config.benchmark,max_ppl_relative_increase:Number(value)/100}})} /></Field>
-                  <p className="muted">对照模型应使用同一版本、分词器及越狱处理阶段的权重。两者按同一语料和上下文测 PPL；失败或超过阈值则阻止直接启动。此结果不替代代码、数学等任务评测。</p>
-                </> : <Notice tone="warn" title="此次不验证量化质量">将验证 GPU 可运行，并按选择测速；质量保持未验证状态。若要比较量化损失，请开启质量门禁。</Notice>}
-                <div className="wizard-actions"><Button disabled={building} onClick={() => setStage(0)}>重新选择模型</Button><Button type="primary" disabled={building || serverInUse || !config.target || !specSelectionValid || (checked.targets?.find(t => t.value === config.target)?.required_sources ?? []).some(name => !checked.provided_sources?.includes(name) && !config.sources[name]?.trim()) || (qualityEnabled && ((!config.benchmark.perplexity_text && !config.benchmark.auto_quality) || (!hfSelected && !config.benchmark.baseline_artifact)))} loading={building} onClick={onAutoStart}>{qualityEnabled ? '转换并验收质量' : '转换并验证可运行'}</Button></div>
+                  {hfSelected ? <Notice title="Independent quality evaluation prepared automatically">By default a pinned WikiText-2 test revision is downloaded, taking up to the first 2048 tokens, separate from train calibration. The weights after this run's processing and before quantization are scored on the CPU automatically; extra RAM and time are needed. A general English corpus does not replace validation of your own tasks such as code or math.</Notice> : <Notice tone="warn">This route needs a high-precision NInfer baseline file from the same processing stage. The program never uses a low-precision artifact to prove itself lossless; without a baseline it can only confirm runnability and the measured speed.</Notice>}
+                  <Field label="Evaluation corpus" required={!hfSelected}><PathInput label="Quality evaluation corpus" kind="file" value={String(config.benchmark.perplexity_text ?? '')} onChange={value => {const benchmark = {...config.benchmark}; delete benchmark.perplexity_text; delete benchmark.auto_quality; patch({benchmark:{...benchmark,...(value ? {perplexity_text:value} : hfSelected ? {auto_quality:true} : {})}});}} placeholder={hfSelected ? 'Optional; leave empty to prepare an independent test set automatically' : 'Select a UTF-8 text file'} /></Field>
+                  {!hfSelected && <Field label="Baseline model" required><PathInput label="Baseline NInfer model" kind="file" value={String(config.benchmark.baseline_artifact ?? '')} onChange={value => patch({benchmark:{...config.benchmark,baseline_artifact:value}})} placeholder="A high-precision .ninfer from the same processing stage" /></Field>}
+                  <Field label="Allowed PPL increase"><InputNumber min={0} max={100} suffix="%" value={Number(config.benchmark.max_ppl_relative_increase ?? .1)*100} onChange={value => patch({benchmark:{...config.benchmark,max_ppl_relative_increase:Number(value)/100}})} /></Field>
+                  <p className="muted">The baseline model should use weights from the same revision, tokenizer and abliteration stage. Both are measured for PPL on the same corpus and context; failure or exceeding the threshold blocks direct start. This result does not replace task evaluations such as code or math.</p>
+                </> : <Notice tone="warn" title="Quantization quality not validated this run">GPU runnability will be validated and speed measured if selected; quality stays unvalidated. To compare quantization loss, enable the quality gate.</Notice>}
+                <div className="wizard-actions"><Button disabled={building} onClick={() => setStage(0)}>Reselect model</Button><Button type="primary" disabled={building || serverInUse || !config.target || !specSelectionValid || (checked.targets?.find(t => t.value === config.target)?.required_sources ?? []).some(name => !checked.provided_sources?.includes(name) && !config.sources[name]?.trim()) || (qualityEnabled && ((!config.benchmark.perplexity_text && !config.benchmark.auto_quality) || (!hfSelected && !config.benchmark.baseline_artifact)))} loading={building} onClick={onAutoStart}>{qualityEnabled ? 'Convert and accept quality' : 'Convert and validate runnability'}</Button></div>
 
               </>}
 
-              {advanced && stage < 3 && <Button onClick={() => {setAdvanced(false); chooseModel(inputPath);}}>返回引导模式（推荐）</Button>}
+              {advanced && stage < 3 && <Button onClick={() => {setAdvanced(false); chooseModel(inputPath);}}>Back to guided mode (recommended)</Button>}
               {advanced && stage < 3 && <ConfigPanel stage={stage} meta={meta} config={config} inputPath={inputPath} onInputPath={chooseModel}
                 baseDir={baseDir} onBaseDir={setBaseDir} inspection={inspection} routeInspection={routeInspection}
                 plan={plan} candidateRecipes={planRecipes} disabled={building}
                 onOutputTouched={() => { outputTouched.current = true; }} onChange={patch} />}
-              {stage === 0 && advanced && baseError && needsBase && <Notice tone="bad" title="原始 HF 目录还未就绪">{baseError}</Notice>}
-              {stage === 0 && advanced && inspectError && <Notice tone="bad" title="无法识别模型">{inspectError}</Notice>}
-              {stage === 0 && advanced && <Collapse ghost items={[{ key: 'setup', label: '高级路径设置（自动模式无需填写）', children: <>
-                <p>本页面在当前电脑运行。首次使用可双击项目根目录的「启动 TurboForge.bat」，自动检查并安装项目依赖。</p>
-                <Field label="NInfer 转换器源码目录" tooltip="选择包含 tools/convert 的 ninfer-all 源码目录。">
-                  <PathInput label="转换器源码目录" value={config.upstream_dir ?? ''} onChange={(value) => patch({upstream_dir:value})} />
+              {stage === 0 && advanced && baseError && needsBase && <Notice tone="bad" title="The original HF directory is not ready yet">{baseError}</Notice>}
+              {stage === 0 && advanced && inspectError && <Notice tone="bad" title="Cannot identify the model">{inspectError}</Notice>}
+              {stage === 0 && advanced && <Collapse ghost items={[{ key: 'setup', label: 'Advanced path settings (not needed in auto mode)', children: <>
+                <p>This page runs on the current PC. On first use, double-click 'Start TurboForge.bat' in the project root to check and install project dependencies automatically.</p>
+                <Field label="NInfer converter source directory" tooltip="Select the ninfer-all source directory containing tools/convert.">
+                  <PathInput label="Converter source directory" value={config.upstream_dir ?? ''} onChange={(value) => patch({upstream_dir:value})} />
                 </Field>
-                <Field label="NInfer 引擎目录" tooltip="选择包含 ninfer.exe、ninfer-serve.exe 与依赖 DLL 的文件夹；小模型需要对应的适配版。">
-                  <PathInput label="引擎目录" value={config.ninfer_dir ?? ''} onChange={(value) => patch({ninfer_dir:value})} />
+                <Field label="NInfer engine directory" tooltip="Select the folder containing ninfer.exe, ninfer-serve.exe and the dependency DLLs; small models need the matching adapted build.">
+                  <PathInput label="Engine directory" value={config.ninfer_dir ?? ''} onChange={(value) => patch({ninfer_dir:value})} />
                 </Field>
-                <p>缺少转换器：从 <a href="https://github.com/iamwavecut/ninfer-all" target="_blank" rel="noreferrer">NInfer 官方仓库</a>下载源码及匹配的 Windows 发布包，再选择上面的目录。量化模型、引擎版本与 GPU 必须兼容。</p>
-                <p>自动越狱标定需 transformers；Heretic 需 heretic-llm，且保存模型时需要在独立窗口操作。</p>
+                <p>Missing converter: download the source and matching Windows release from the <a href="https://github.com/iamwavecut/ninfer-all" target="_blank" rel="noreferrer">official NInfer repository</a>, then select the directories above. The quantized model, engine version and GPU must be compatible.</p>
+                <p>Automatic abliteration calibration needs transformers; Heretic needs heretic-llm, and saving the model is done in a separate window.</p>
               </> }]} />}
-              {advanced && stage === 1 && <Notice title="量化与速度如何选择">NInfer 的三值与 GSQ Q2 需要现成来源；HF GPTQ 可校准为 2/3/4/8 bit。不同路线使用不同引擎，低位宽不保证更快或保持质量。</Notice>}
+              {advanced && stage === 1 && <Notice title="How to choose quantization and speed">NInfer ternary and GSQ Q2 need ready-made sources; HF GPTQ can calibrate to 2/3/4/8 bit. Different routes use different engines; lower bit width does not guarantee more speed or unchanged quality.</Notice>}
               {stage === 3 && <>
-                <Notice title={advanced ? '配置确认后，点击下方开始转换' : building ? '自动任务正在运行' : '查看结果并启动使用'}>保持本机服务运行。流程会自动完成越狱（如选择）、量化、GPU 验证与实测（如开启）；通过后可直接在本页启动模型 API。</Notice>
-                {checked?.runtime_engine && <Notice tone="info" title={`产物运行路线 · 配套引擎，另可选 ${checked.runtime_engine.label}`}>
-                  <p>本页「启动模型服务」与 scripts/run.bat 用配套引擎运行本次产物（.ninfer→NInfer，AWQ/GPTQ→HF）。{checked.runtime_engine.label} 需单独下载：<a href={checked.runtime_engine.url} target="_blank" rel="noreferrer">{checked.runtime_engine.url}</a>。{checked.runtime_engine.steps}</p>
+                <Notice title={advanced ? 'After confirming the config, click below to start conversion' : building ? 'The automatic task is running' : 'View results and start using'}>Keep the local service running. The flow completes abliteration (if selected), quantization, GPU validation and measurement (if enabled) automatically; once passed, you can start the model API directly on this page.</Notice>
+                {checked?.runtime_engine && <Notice tone="info" title={`Artifact runtime route · companion engine, optionally ${checked.runtime_engine.label}`}>
+                  <p>'Start model API' on this page and scripts/run.bat run this artifact with the companion engine (.ninfer→NInfer, AWQ/GPTQ→HF). {checked.runtime_engine.label} must be downloaded separately: <a href={checked.runtime_engine.url} target="_blank" rel="noreferrer">{checked.runtime_engine.url}</a>. {checked.runtime_engine.steps}</p>
                 </Notice>}
                 {pollError && <Notice tone="warn">{pollError}</Notice>}
                 <BuildPanel canBuild={canBuild} building={building} buildStatus={buildStatus} log={log} startMs={startMs}
                   performance={performance} quality={quality} onServerActive={setServerInUse} onStart={onStart} buildId={buildId} />
               </>}
               {(advanced || stage === 3) && <div className="wizard-actions">
-                <Button disabled={stage === 0 || building || serverInUse} onClick={() => go(stage - 1)}>上一步</Button>
-                <span className="muted">{stage < 3 ? `下一步：${titles[stage + 1]}` : serverInUse ? '请先停止服务，再开始新转换' : '原始模型不会被覆盖'}</span>
-                {stage < 3 && <Button type="primary" disabled={!nextReady || building} loading={inspectLoading || planLoading} onClick={() => go(stage + 1)}>下一步</Button>}
+                <Button disabled={stage === 0 || building || serverInUse} onClick={() => go(stage - 1)}>Previous</Button>
+                <span className="muted">{stage < 3 ? `Next: ${titles[stage + 1]}` : serverInUse ? 'Stop the service before starting a new conversion' : 'The original model is never overwritten'}</span>
+                {stage < 3 && <Button type="primary" disabled={!nextReady || building} loading={inspectLoading || planLoading} onClick={() => go(stage + 1)}>Next</Button>}
               </div>}
             </> : !metaError && <Skeleton active paragraph={{rows:5}} />}
           </Panel>
-          {stage > 0 && <Collapse ghost items={[{key:'technical', label:'查看完整技术计划与诊断', children:<PlanPreview plan={displayPlan} capabilities={capabilities} loading={planLoading} error={planError} /> }]} />}
+          {stage > 0 && <Collapse ghost items={[{key:'technical', label:'View the full technical plan and diagnostics', children:<PlanPreview plan={displayPlan} capabilities={capabilities} loading={planLoading} error={planError} /> }]} />}
           <StoragePanel disabled={building || serverInUse} />
         </div>
         <aside className="col wizard-aside">
-          {!advanced && stage === 1 ? <Panel title="本次处理路线"><p>{inspection?.weight_precision ?? '仓库模型'} → {config.jailbreak === 'none' ? '保留原行为' : 'Abliteration'} → {checked?.targets?.find(t => t.value === config.target)?.label ?? '自动推荐量化'} → {!specSelectionValid ? '需确认推测设置' : hfSelected ? 'HF 基础解码' : ({auto:'自动选择兼容解码',none:'基础解码',mtp:'MTP 推测解码',dflash2:'DFlash2 推测解码'} as Record<string,string>)[selectedSpec]}</p><p>{qualityEnabled ? '验收：GPU 加载、速度实测、同语料 PPL 门禁' : '验收：GPU 加载' + (config.run_benchmark ? '与速度实测；质量未实测' : '；速度与质量未实测')}</p><p className="muted">不会擅自替换你指定的量化方案。原始模型保留，所需依赖自动准备。</p></Panel> : <WorkflowSummary concise={!advanced && stage < 3} plan={displayPlan} inspection={actualInspection} config={actualConfig} loading={planLoading || inspectLoading || buildStatus?.status === 'preparing'} />}
-          {stage === 0 && inspection && <Collapse ghost items={[{key:'inspection', label:'查看模型识别详情', children:<InspectionCard inspection={inspection} loading={inspectLoading} error={inspectError} meta={meta} /> }]} />}
-          {advanced && planError && <Notice tone="bad" title="配置未就绪">{planError}</Notice>}
+          {!advanced && stage === 1 ? <Panel title="This processing route"><p>{inspection?.weight_precision ?? 'Repository model'} → {config.jailbreak === 'none' ? 'Keep original behavior' : 'Abliteration'} → {checked?.targets?.find(t => t.value === config.target)?.label ?? 'Auto-recommended quantization'} → {!specSelectionValid ? 'Speculation settings need confirmation' : hfSelected ? 'HF basic decoding' : ({auto:'Compatible decoding selected automatically',none:'Basic decoding',mtp:'MTP speculative decoding',dflash2:'DFlash2 speculative decoding'} as Record<string,string>)[selectedSpec]}</p><p>{qualityEnabled ? 'Acceptance: GPU load, measured speed, same-corpus PPL gate' : 'Acceptance: GPU load' + (config.run_benchmark ? ' and measured speed; quality not measured' : '; speed and quality not measured')}</p><p className="muted">Your specified quantization plan is never substituted. The original model is kept and required dependencies are prepared automatically.</p></Panel> : <WorkflowSummary concise={!advanced && stage < 3} plan={displayPlan} inspection={actualInspection} config={actualConfig} loading={planLoading || inspectLoading || buildStatus?.status === 'preparing'} />}
+          {stage === 0 && inspection && <Collapse ghost items={[{key:'inspection', label:'View model identification details', children:<InspectionCard inspection={inspection} loading={inspectLoading} error={inspectError} meta={meta} /> }]} />}
+          {advanced && planError && <Notice tone="bad" title="Config not ready">{planError}</Notice>}
         </aside>
       </main>
     </div>

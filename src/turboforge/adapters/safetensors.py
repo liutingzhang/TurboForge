@@ -301,14 +301,14 @@ class SafetensorsAdapter(InputAdapter):
             key in config for key in ("num_nextn_predict_layers", "mtp_config", "num_mtp_layers")
         )
         if has_mtp_config and not embedded["mtp"]:
-            result["mtp_hint"] = "配置声明 MTP，但当前权重内未找到 mtp.* 张量；不会自动启用"
+            result["mtp_hint"] = "The config declares MTP, but no mtp.* tensors were found in the current weights; it is not enabled automatically"
 
         for component, source in companions(root).items():
             if result.get(component, {}).get("detected"):
                 for name in embedded[component]:
                     shard = (root / tensor_files[name]).resolve()
                     if Path(source) not in shard.parents:
-                        raise ValueError(f"模型同时内嵌并附带独立 {component.upper()}，请明确整理来源，不能猜测覆盖")
+                        raise ValueError(f"The model both embeds and bundles a separate {component.upper()}; organize the sources explicitly, no guessed overwrite")
             result[component] = {
                 "detected": True,
                 "compatibility_verified": False,

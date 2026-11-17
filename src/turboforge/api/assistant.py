@@ -46,7 +46,7 @@ def register_assistant(app, manager, root: Path | None = None):
 
     def ready():
         if service is None:
-            raise init_error or AssistantError("unavailable", "助手初始化失败，请检查配置", 503)
+            raise init_error or AssistantError("unavailable", "Assistant initialization failed; check the configuration", 503)
         return service
 
     @blueprint.route("/storage", methods=["GET", "DELETE"])
@@ -57,7 +57,7 @@ def register_assistant(app, manager, root: Path | None = None):
             return jsonify(inventory(cache_root()))
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or set(body) != {"ids"} or not isinstance(body["ids"], list):
-            return jsonify({"error": "请选择需要删除的失败构建"}), 400
+            return jsonify({"error": "Select the failed builds to delete"}), 400
         try:
             return jsonify(manager.clean_failed_outputs(body["ids"]))
         except (ValueError, OSError) as exc:
@@ -73,9 +73,9 @@ def register_assistant(app, manager, root: Path | None = None):
         host = urlsplit(request.host_url).hostname or ""
         if is_assistant:
             if not loopback(host) or not loopback(request.remote_addr or ""):
-                return jsonify({"error": "首版助手仅供本机访问，公开部署需完整认证与权限改造", "code": "local_only"}), 403
+                return jsonify({"error": "This first assistant release is local-only; public deployment needs full authentication and permission work", "code": "local_only"}), 403
             if request.headers.get("Sec-Fetch-Site") == "cross-site":
-                return jsonify({"error": "已拒绝跨站助手请求", "code": "origin"}), 403
+                return jsonify({"error": "Cross-site assistant request rejected", "code": "origin"}), 403
             incoming_origin = request.headers.get("Origin")
             allowed = {request.host_url.rstrip("/")}
             # Explicit opt-in development origin; no CORS response headers are emitted.
@@ -83,7 +83,7 @@ def register_assistant(app, manager, root: Path | None = None):
             if dev_origin in ("http://127.0.0.1:5173", "http://localhost:5173"):
                 allowed.add(dev_origin)
             if incoming_origin is not None and incoming_origin not in allowed:
-                return jsonify({"error": "助手请求来源不被允许", "code": "origin"}), 403
+                return jsonify({"error": "Assistant request origin is not allowed", "code": "origin"}), 403
         try:
             session = sessions.get(request.cookies.get(COOKIE), service.config_store.default if service else ConnectionConfig())
         except AssistantError as exc:
@@ -94,9 +94,9 @@ def register_assistant(app, manager, root: Path | None = None):
         if is_assistant and request.method not in ("GET", "HEAD", "OPTIONS"):
             token = request.headers.get("X-Assistant-CSRF", "")
             if not incoming_origin or not secrets.compare_digest(token, session.csrf):
-                return jsonify({"error": "会话已过期或缺少同源 CSRF 校验，请刷新助手", "code": "csrf"}), 403
+                return jsonify({"error": "Session expired or missing same-origin CSRF check; refresh the assistant", "code": "csrf"}), 403
             if request.method != "DELETE" and request.mimetype != "application/json":
-                return jsonify({"error": "助手写请求必须使用 JSON", "code": "content_type"}), 415
+                return jsonify({"error": "Assistant write requests must use JSON", "code": "content_type"}), 415
         return None
 
     @app.after_request
@@ -122,13 +122,13 @@ def register_assistant(app, manager, root: Path | None = None):
     def body():
         raw = request.stream.read(65537)
         if len(raw) > 65536:
-            raise AssistantError("request_size", "助手请求超过 64KiB，请缩小内容", 413)
+            raise AssistantError("request_size", "Assistant request exceeds 64KiB; shrink the content", 413)
         try:
             value = json.loads(raw)
         except (ValueError, UnicodeDecodeError, RecursionError):
-            raise AssistantError("request_json", "请求不是有效 JSON") from None
+            raise AssistantError("request_json", "The request is not valid JSON") from None
         if not isinstance(value, dict):
-            raise AssistantError("request_json", "请求必须是 JSON 对象")
+            raise AssistantError("request_json", "The request must be a JSON object")
         return value
 
     @blueprint.get("/config")
@@ -156,16 +156,16 @@ def register_assistant(app, manager, root: Path | None = None):
         if "tested_config_id" in value:
             tested = g.assistant_session.tested_config
             if set(value) - {"tested_config_id", "scope"} or not isinstance(value["tested_config_id"], str) or not tested or not secrets.compare_digest(value["tested_config_id"], tested[0]) or time.monotonic() - tested[2] > 300:
-                raise AssistantError("test_expired", "已测试配置过期或不属于本会话，请重新测试")
+                raise AssistantError("test_expired", "The tested configuration expired or does not belong to this session; test again")
             config = tested[1]
         else:
             config = from_payload(value, g.assistant_session.config)
         scope = value.get("scope", "session")
         if scope not in ("session", "dotenv"):
-            raise AssistantError("config_scope", "配置作用域只能为 session 或 dotenv")
+            raise AssistantError("config_scope", "Configuration scope must be session or dotenv")
         if scope == "dotenv":
             if not current.config_store.allow_persist:
-                raise AssistantError("persistence_disabled", "管理员未开启本机 .env 保存，可使用本次会话配置", 403)
+                raise AssistantError("persistence_disabled", "The administrator has not enabled local .env saving; use the session configuration instead", 403)
             current.test_connection(g.assistant_session, config)
             config = current.config_store.persist(config)
             current.client.allowed_local = current.config_store.allowed_local_origins
@@ -178,7 +178,7 @@ def register_assistant(app, manager, root: Path | None = None):
         with sessions.lock:
             g.assistant_session.tested_config = None
         return jsonify({**config.public(), "saved_scope": scope,
-            "notice": "文件已保存，当前环境变量仍优先" if scope == "dotenv" and config.source == "environment" else None})
+            "notice": "File saved; current environment variables still take priority" if scope == "dotenv" and config.source == "environment" else None})
 
     @blueprint.delete("/config/session")
     def clear_configuration():
@@ -193,7 +193,7 @@ def register_assistant(app, manager, root: Path | None = None):
         query = request.args.get("q", "")
         topic = request.args.get("topic", "")
         if len(query) > 2000 or len(topic) > 100:
-            raise AssistantError("search_size", "搜索内容过长")
+            raise AssistantError("search_size", "Search content is too long")
         limit = 30 if query else 500
         entries = knowledge.search(query, topic=topic, limit=limit)
         return jsonify({"entries": entries, "total": len(entries)})
@@ -202,7 +202,7 @@ def register_assistant(app, manager, root: Path | None = None):
     def help_entry(identifier):
         entry = knowledge.by_id.get(identifier)
         if entry is None:
-            raise AssistantError("help_missing", "没有这个帮助条目", 404)
+            raise AssistantError("help_missing", "No such help entry", 404)
         return jsonify(entry)
 
     @blueprint.post("/chat")
@@ -243,7 +243,7 @@ def register_assistant(app, manager, root: Path | None = None):
     @blueprint.post("/chat/<identifier>/cancel")
     def cancel(identifier):
         ready().sessions.cancel(g.assistant_session, identifier)
-        return jsonify({"cancelled": True, "notice": "已停止读取；上游仍可能计费"})
+        return jsonify({"cancelled": True, "notice": "Stopped reading; the upstream may still bill"})
 
     @blueprint.route("/conversations/<identifier>", methods=["GET", "DELETE"])
     def conversation(identifier):
@@ -251,10 +251,10 @@ def register_assistant(app, manager, root: Path | None = None):
         with sessions.lock:
             entry = session.conversations.get(identifier)
             if entry is None:
-                raise AssistantError("conversation_missing", "对话已过期或不属于本会话", 404)
+                raise AssistantError("conversation_missing", "Conversation expired or does not belong to this session", 404)
             if request.method == "DELETE":
                 if session.requests:
-                    raise AssistantError("busy", "请先停止当前回答再删除对话", 409)
+                    raise AssistantError("busy", "Stop the current answer before deleting the conversation", 409)
                 del session.conversations[identifier]
                 return jsonify({"deleted": True})
             return jsonify({"conversation_id": entry.id, "build_id": entry.boundary[0], "model": entry.boundary[2],

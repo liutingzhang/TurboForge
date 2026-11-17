@@ -1,315 +1,315 @@
-# TurboForge AI 助手知识库初稿与问题覆盖表
+# TurboForge AI assistant knowledge draft and question coverage table
 
-日期：2026-11-14。配套[改造方案](AI_ASSISTANT_REFACTOR_PLAN.md)、[诊断目录](AI_ASSISTANT_DIAGNOSTICS.md)。本文是待接入的内容初稿，不是已上线知识服务。
+Date: 2026-11-14. Companion [refactor plan](AI_ASSISTANT_REFACTOR_PLAN.md), [diagnostic catalog](AI_ASSISTANT_DIAGNOSTICS.md). This document is a content draft to be wired in, not a live knowledge service.
 
-## 1. 内容使用契约
+## 1. Content usage contract
 
-本文围绕当前源码回答，产品与第三方版本变化后需要复核。未来每个表格行转成一个或多个稳定 ID 知识条目，保留适用路线、代码来源和证据等级；不直接把整篇文档塞进每轮 prompt。
+This document answers against the current source code; re-check it when the product or third-party versions change. In future each table row becomes one or more stable-ID knowledge entries, keeping the applicable route, code source, and evidence level; the whole document is never stuffed into every prompt turn.
 
-当前事实来源：`precheck.py`、`planner.py`、`backends/registry.py`、`backends/hf_quantization.py`、`backends/hf_worker.py`、`serving.py`、`api/builds.py`、`reports.py`，以及版本匹配的 `SUPPORTED_CAPABILITIES.md / AWQ_GPTQ.md / SPECULATIVE_RETENTION.md / QUANTIZATION_HARDENING.md`。现有文档中的历史计数、旧路线限制不能覆盖当前代码。
+Current fact sources: `precheck.py`, `planner.py`, `backends/registry.py`, `backends/hf_quantization.py`, `backends/hf_worker.py`, `serving.py`, `api/builds.py`, `reports.py`, plus the version-matched `SUPPORTED_CAPABILITIES.md / AWQ_GPTQ.md / SPECULATIVE_RETENTION.md / QUANTIZATION_HARDENING.md`. Historical counts and old route limits in existing docs must not override current code.
 
-答案形式：先用一句话回应，再给 1–3 步操作；先展示与当前用户有关的部分，原理折叠。无法从任务快照确认时，用条件句，不能假装读到了用户硬件、文件或报告。
+Answer shape: respond in one sentence first, then give 1–3 action steps; show the part relevant to the current user first and fold the theory away. When the task snapshot cannot confirm something, use conditional sentences — never pretend to have read the user's hardware, files, or reports.
 
-## 2. 必须固定的核心结论
+## 2. Core conclusions that must stay fixed
 
-1. TurboForge 负责模型准备、转换、验证和管理启动；推理由相应 NInfer/HF 引擎执行。
-2. 识别输入、规划可执行、转换成功、GPU 验证通过、质量通过、服务 ready、质量符合用途是不同结论。
-3. 可选项取决于架构、几何、输入格式、配方、附加来源和本机环境；“某家族支持”不等于所有规模/版本支持。
-4. NInfer 和 HF AWQ/GPTQ 是不同路线，产物、依赖、运行能力不同，不混用加载器。
-5. 低 bit 常可减少权重存储，但不保证质量不变、速度更快或总显存按比例下降。
-6. 主位宽、平均 bits per weight、磁盘文件大小、运行时显存是四个不同量。
-7. 原样导入量化块不恢复原始精度，也不等于所有转换链路完全无风险。
-8. Bonsai 2 要求已有匹配三值来源，项目不会把任意 BF16 模型训练成三值模型。
-9. MTP/DFlash2 的检测、保留、运行启用、实测提速需分别证明；现有 HF 服务不执行它们。
-10. 同语料 PPL 门禁只覆盖该测试设置；不能保证代码、数学、长文或指令遵循能力。
-11. 资源估计与历史成绩不能冒充当前实测，未知显示未知，失败不改写成成功。
-12. AI 配置不属于转换模型配置：助手可以使用外部模型，不需要等待当前待转换模型运行成功。
+1. TurboForge handles model preparation, conversion, validation, and managed startup; inference is executed by the corresponding NInfer/HF engine.
+2. Input identified, plan runnable, conversion succeeded, GPU validation passed, quality passed, service ready, and quality fit for the purpose are different conclusions.
+3. Available options depend on architecture, geometry, input format, recipe, additional sources, and the local environment; "a family is supported" does not mean every size/version is supported.
+4. NInfer and HF AWQ/GPTQ are different routes with different artifacts, dependencies, and runtime capabilities; loaders are not mixed.
+5. Lower bits often reduce weight storage, but do not guarantee unchanged quality, more speed, or a proportional drop in total VRAM.
+6. Main bit width, average bits per weight, on-disk file size, and runtime VRAM are four different quantities.
+7. Importing quantized blocks as-is does not restore original precision, and does not mean every conversion chain is completely risk-free.
+8. Bonsai 2 requires an existing matching ternary source; the project does not train an arbitrary BF16 model into a ternary model.
+9. Detection, retention, runtime enablement, and measured speedup of MTP/DFlash2 must each be proven separately; the current HF service does not execute them.
+10. A same-corpus PPL gate covers only that test setup; it cannot guarantee code, math, long-text, or instruction-following ability.
+11. Resource estimates and historical results must not pose as current measurements; unknown shows as unknown, and failure is never rewritten as success.
+12. AI configuration is not conversion-model configuration: the assistant can use an external model and does not need to wait for the model being converted to run successfully.
 
-## 3. 量化方式与选择知识
+## 3. Quantization methods and selection knowledge
 
-### 3.1 路线比较
+### 3.1 Route comparison
 
-| 方式 | 当前项目做什么 | 需要什么 | 主要取舍与边界 |
+| Method | What the project does now | What it needs | Main trade-offs and boundaries |
 |---|---|---|---|
-| BF16/FP16 原始权重 | 作为高精度输入与权重处理来源 | 完整 HF 配置/分词器/权重 | 高内存/磁盘开销；NInfer 没有通用 BF16 preserve 配方，不代表 HF 内部不能读取高精度对照 |
-| NInfer 原生分组混合量化 | 使用注册配方编码不同张量 | 匹配架构和几何 | 名称里的 Q4/Q5/Q6 不一定是整模型统一位宽；部分内核固定大模型几何 |
-| GGML Q8_0 桥接 | 已接入小模型等适用几何 | 配方允许的高精度输入 | 当前小模型自动路径常选它；不能解释成所有模型总是默认 8-bit |
-| GGML Q4_0 / Q5_0 本地编码 | Qwen3.5 0.8B hidden 1024 对应适配 | 匹配当前几何 | 嵌入与输出头保留 Q8 等混合格式；低 bit 需显式选，不能扩大为任意规模支持 |
-| MXFP4 本地编码 | 当前已接入几何的 4-bit 浮点编码 | 匹配配方和引擎 | 与 NVFP4、INT4 不同；不得只按“都是 4”认定可互换 |
-| NVFP4 导入 | 校验并保留对应 packed/scale 布局 | 完整量化检查点、匹配原始资料、明确 producer 布局 | 约 4.25 bpw 为该路线口径；文件名不证明布局，不能恢复 BF16 真值 |
-| GGUF 导入 | 导入受支持已有量化块 | 完整 GGUF 分片及匹配 config/tokenizer | 精度由输入决定；不是任意 GGUF 到任意 bit 的通用重量化器 |
-| imatrix 配方 | 利用适配的重要性矩阵辅助量化 | 对应模型/张量匹配的矩阵 | 矩阵不等于普通语料；匹配性与实际效果需要验证 |
-| Bonsai 2 / PQ2_0 | 导入既有匹配三值来源 | 对应 27B Dense 几何、已发布 PQ2_0 GGUF | 不是通用 INT2，不训练新三值权重；其他张量/头部仍可能更高精度 |
-| GSQ Q2 | Flash-Next 对应已有 Q2_0 专家权重导入 | 特定模型几何和原生来源 | 不是把任意 MoE 量化成 2-bit，也不等同于 Bonsai 三值 |
-| AWQ 4-bit HF 路线 | `hf_awq_4` 用真实校准生成原生格式 | 原始高精度模型、校准文本、独立 GPTQModel 环境 | 激活感知方法，不等于普通 Q4；当前支持 GEMM 布局，GPU 实机验收仍待完成 |
-| GPTQ 2/3/4/8-bit HF 路线 | 对应 `hf_gptq_*` 执行真实校准 | 受支持架构、校准资料、独立环境 | 支持的位宽和 packing 由代码限制，低 bit 效果受模型与数据影响，不保证优于其他算法 |
-| 已有 AWQ/GPTQ 保留 | `hf_packed_import` 校验并保留 | 完整受支持 packed 检查点 | 不二次量化、不更换 bit、不提供高精度权重编辑；未接入的厂商重排布局会拒绝 |
+| BF16/FP16 original weights | Serves as full-precision input and weight-processing source | Complete HF config/tokenizer/weights | High RAM/disk cost; NInfer has no general BF16 preserve recipe, which does not mean HF cannot read a full-precision reference internally |
+| NInfer native groupwise mixed quantization | Uses registered recipes to encode different tensors | Matching architecture and geometry | Q4/Q5/Q6 in the name is not necessarily a uniform bit width across the model; some kernels are locked to large-model geometry |
+| GGML Q8_0 bridge | Wired for applicable geometries such as small models | Full-precision input allowed by the recipe | The current small-model auto path often picks it; this must not be explained as an 8-bit default for all models always |
+| GGML Q4_0 / Q5_0 local encoding | Adapted for Qwen3.5 0.8B hidden 1024 | Matching current geometry | Embeddings and output head keep Q8 and other mixed formats; low bits need an explicit choice and must not be generalized to arbitrary sizes |
+| MXFP4 local encoding | 4-bit floating-point encoding for currently wired geometries | Matching recipe and engine | Different from NVFP4 and INT4; never treat them as interchangeable just because "all are 4" |
+| NVFP4 import | Validates and keeps the corresponding packed/scale layout | Complete quantized checkpoint, matching original files, explicit producer layout | About 4.25 bpw is this route's basis; the file name does not prove the layout, and BF16 true values cannot be restored |
+| GGUF import | Imports supported existing quantized blocks | Complete GGUF shards and matching config/tokenizer | Precision is decided by the input; it is not a general requantizer from any GGUF to any bit |
+| imatrix recipe | Uses an adapted importance matrix to assist quantization | A matrix matching the model/tensors | A matrix is not ordinary corpus; matching and actual effect need verification |
+| Bonsai 2 / PQ2_0 | Imports an existing matching ternary source | The corresponding 27B Dense geometry, a published PQ2_0 GGUF | Not general INT2, and no new ternary weights are trained; other tensors/heads may still be higher precision |
+| GSQ Q2 | Imports existing Q2_0 expert weights for Flash-Next | Specific model geometry and native source | Not quantizing an arbitrary MoE to 2-bit, and not the same as Bonsai ternary |
+| AWQ 4-bit HF route | `hf_awq_4` generates the native format with real calibration | Original full-precision model, calibration text, isolated GPTQModel environment | An activation-aware method, not ordinary Q4; currently supports the GEMM layout, and real-GPU acceptance is still pending |
+| GPTQ 2/3/4/8-bit HF route | The corresponding `hf_gptq_*` runs real calibration | Supported architecture, calibration files, isolated environment | Supported bit widths and packing are limited by code; low-bit results depend on model and data, with no guarantee of beating other algorithms |
+| Existing AWQ/GPTQ retention | `hf_packed_import` validates and keeps | A complete supported packed checkpoint | No second quantization, no bit change, no full-precision weight editing; unwired vendor-reordered layouts are rejected |
 
-上述是产品能力摘要，并非所有组合都经过当前机器 GPU 实测。具体来源和范围参见[能力矩阵](SUPPORTED_CAPABILITIES.md)、[HF 路线](AWQ_GPTQ.md)。
+The above is a product capability summary; not every combination has been measured on this machine's GPU. For specific sources and scope see the [capability matrix](SUPPORTED_CAPABILITIES.md) and [HF route](AWQ_GPTQ.md).
 
-### 3.2 简单选择树
+### 3.2 Simple selection tree
 
 ```text
-先检查模型
-  ├─ 不支持/不完整 → 修复来源或换支持输入，不盲目下载大文件
-  ├─ 已有 GGUF/NVFP4 → 使用可用导入路线，保留原精度；补匹配原始资料
-  ├─ 已有 AWQ/GPTQ → HF 原生保留，确认布局；不送 NInfer
-  └─ 原始高精度
-       ├─ 无特殊目标 → 看当前检查结果的自动推荐与资源预估
-       ├─ 需要省显存 → 比较可选更低 bpw、上下文与并发，并进行质量测试
-       ├─ 明确需要 AWQ/GPTQ → 选 HF 配方，接受独立环境及现有能力限制
-       └─ 已有匹配三值来源 → 可选 Bonsai 导入，不另做高精度越狱
+Inspect the model first
+  ├─ Unsupported/incomplete → fix the source or switch to a supported input; do not blindly download large files
+  ├─ Existing GGUF/NVFP4 → use an available import route, keep the original precision; supply matching original files
+  ├─ Existing AWQ/GPTQ → HF native retention, confirm the layout; do not send to NInfer
+  └─ Original full precision
+       ├─ No special target → see the auto recommendation and resource estimate from the current inspection
+       ├─ Need to save VRAM → compare available lower bpw, context, and concurrency, and run a quality test
+       ├─ Explicitly need AWQ/GPTQ → choose an HF recipe, accepting the isolated environment and current capability limits
+       └─ Existing matching ternary source → optionally import via Bonsai; do not run a separate full-precision abliteration
 ```
 
-回答“我该选哪个”时至少看：输入格式、实际可选项、GPU 空闲显存/系统内存/磁盘、用途与上下文、质量要求；缺少时先给安全的条件建议，不随口指定 4-bit。
+When answering "which should I pick", look at least at: input format, actual available options, free GPU VRAM/system RAM/disk, purpose and context, and quality requirements; when something is missing, give a safe conditional suggestion first — never casually prescribe 4-bit.
 
-## 4. 用户问题目录与回答要点
+## 4. User question catalog and answer points
 
-以下 131 个条目是内容覆盖基线（首版 120 条，架构路由改造新增 B11/C11，MoE 引擎选型新增 B12/C12/C13/C14/D11/J11，三路线傻瓜运行步骤新增 J12/J13/J14）；每个条目应能在帮助中心搜索、被检索并关联业务区域。固定错误码另按诊断目录逐项覆盖。
+The 131 entries below are the content coverage baseline (first version 120; the architecture-routing refactor added B11/C11; MoE engine selection added B12/C12/C13/C14/D11/J11; the three-route plain-language run steps added J12/J13/J14). Every entry should be searchable in the help center, retrievable, and linked to a business area. Fixed error codes are covered item by item in the diagnostic catalog.
 
-### A. 第一次使用与环境（A01–A10）
+### A. First use and environment (A01–A10)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| A01 | 我完全不懂模型，先做什么？ | 双击启动脚本→选择本机模型/公开 HF 链接→检查→选择推荐→自动准备并转换→看验证→启动；解释每步当前要填的唯一必要信息 |
-| A02 | 我必须安装 Python、Node、CUDA 吗？ | 整合包与源码开发不同；一键脚本按需准备 Python/页面/依赖，已构建整合包无需 Node；驱动必须可用，不保证任意环境自动修好 |
-| A03 | 支持 AMD、Mac 或纯 CPU 吗？ | 当前一键目标 Windows x64 + 受支持 NVIDIA；CPU 转换选项存在但未经该模型测速，不等于所有 GPU 推理可以改成 CPU |
-| A04 | 需要联网多久、下载多少？ | 首次依赖/模型可能很大，后续复用校验缓存；按任务日志说明阶段，不凭模型名估计完成分钟数 |
-| A05 | 我已经装过这些依赖，为什么还下载？ | 查看实际 worker/专用环境与版本；系统 Python 不等于任务环境；HF 与 NInfer 环境独立 |
-| A06 | 双击后窗口关闭、页面打不开？ | 查看启动失败文字与 `.turboforge/logs/`，运行 `启动 TurboForge.bat --check`；页面未构建、权限、网络、端口分别排查 |
-| A07 | 8090 打不开，是不是坏了？ | 一键启动可能选择其他可用端口，使用启动窗口显示的实际 URL；模型 API 端口默认取 .env 白名单第一个 origin 的端口（模板 18080），是另一服务 |
-| A08 | 我需要管理员权限或升级驱动吗？ | 先读具体错误；不要默认提权。驱动不支持时按官方驱动要求处理，脚本不自动修改驱动 |
-| A09 | 可以关闭命令行窗口吗？ | 当前启动窗口承载页面服务，关闭会中断任务，所属模型进程可能随之释放；区分刷新网页与关闭服务 |
-| A10 | 不配置 AI 还能用吗？ | 可以，模型转换与帮助中心独立；AI 是解释入口，不是运行前提 |
+| A01 | I know nothing about models — what do I do first? | Double-click the launcher → pick a local model/public HF link → inspect → choose the recommendation → automatic preparation and conversion → check validation → start; explain the single necessary input for each step now |
+| A02 | Must I install Python, Node, or CUDA? | The bundle and source development differ; the one-click script prepares Python/page/dependencies as needed, and a built bundle needs no Node; the driver must work, and no arbitrary environment is guaranteed to auto-repair |
+| A03 | Are AMD, Mac, or CPU-only supported? | The current one-click target is Windows x64 + supported NVIDIA; a CPU conversion option exists but has no speed measurement for this model, and it does not mean all GPU inference can switch to CPU |
+| A04 | How long online and how much download? | First-time dependencies/models can be large; later runs reuse the verified cache; explain stages from the task log — never estimate completion minutes from the model name |
+| A05 | I already installed these dependencies — why download again? | Check the actual worker/dedicated environment and versions; system Python is not the task environment; HF and NInfer environments are separate |
+| A06 | The window closes after double-click and the page will not open? | Read the startup failure text and `.turboforge/logs/`, run `Start TurboForge.bat --check`; troubleshoot unbuilt page, permissions, network, and port separately |
+| A07 | 8090 will not open — is it broken? | One-click start may pick another free port; use the actual URL shown in the startup window; the model API port defaults to the port of the first origin in the .env allowlist (template 18080) and is a different service |
+| A08 | Do I need administrator rights or a driver upgrade? | Read the specific error first; never elevate by default. When the driver is unsupported, follow the official driver requirements — the script does not modify drivers automatically |
+| A09 | Can I close the command-line window? | The current startup window hosts the page service; closing it interrupts tasks and the owned model process may be released with it; distinguish refreshing the page from closing the service |
+| A10 | Can I use it without configuring AI? | Yes; model conversion and the help center are independent; AI is an explanation entry, not a runtime prerequisite |
 
-### B. 输入、下载与模型识别（B01–B12）
+### B. Input, download, and model identification (B01–B12)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| B01 | 本地模型路径填什么，路径存在为什么仍无效？ | 路径属于运行 TurboForge 服务的电脑；可选择或粘贴，支持成对引号和首尾空格，保留目录内部空格。完整 HF 填模型目录并将原始模型来源留空；GGUF 选具体文件。路径存在、资料完整、路线支持是三项独立检查，按明确缺失项处理 |
-| B02 | Hugging Face 链接填哪一种？ | 使用模型仓库或明确文件/revision 链接；多 GGUF 时选具体文件，保留明确版本；不是任意网页链接 |
-| B03 | 私有或受限模型为什么下载失败？ | 核对合法仓库访问权限与许可；不请求把访问 token 发给助手，也不承诺绕过限制 |
-| B04 | 空白环境只有一个 GGUF 可以转吗？ | 发行包不含模型，不能依赖开发者已有目录。先检查是否属于受支持独立导入；其他路线再核实原始仓库，有声明则自动解析，否则用户提供原始仓库链接，仅获取配置/分词器。完整 Qwen3.5-0.8B Q8_0 单文件已支持从内嵌参数/词表/merges/模板生成资源并独立导入，无需原始目录；解码后重编码 Q8_0，非无损，上下文上限 1024；缺元数据或其他未支持布局仍不能猜配置 |
-| B05 | 为什么选了 GGUF 还要原始模型，缺少 config.json 怎么办？ | 已支持的自包含 Qwen3.5-0.8B Q8_0 GGUF 可自动生成配置/分词器/模板，原始来源留空。其他路线的原始模型来源应是含 config.json 与 tokenizer.json/tokenizer.model 的匹配 HF 目录或原始仓库；仅含 GGUF 的目录不满足条件。GGUF 导入只读元数据时不要求原始 Safetensors；NVFP4 可能需原始高精度张量。补齐资料仍须通过架构/尺寸支持检查，不能伪造配置 |
-| B06 | 什么是分片，少一个能继续吗？ | 多个文件共同构成完整检查点；缺片停止，按原仓库补齐；不伪造张量 |
-| B07 | 文件名写 NVFP4 怎么没识别？ | 需要量化配置、packed 权重、scale/块布局真实证据；名称不足以认定 |
-| B08 | 同名模型为什么别人能转我不能？ | 核对 revision、架构/几何、实际格式、来源完整性与引擎版本。小模型 NInfer 路线需适配版整合包，不能将开发者本机已有适配当成普通官方引擎普遍具备的能力；未知环境不可承诺已验收 |
-| B09 | 已有 `.ninfer` 能再改 bit 吗？ | 当前不是通用 `.ninfer` 重量化器；查看可用输入路线，优先回到原始权重或兼容导入来源 |
-| B10 | 下载断了要重下吗？ | 当前下载支持断点与校验缓存复用，可重新发起；构建中断不等于转换一定可原地续算，保留诊断 |
-| B11 | MoE 混合专家与 Dense 稠密架构怎么自动识别？ | 检查模型时后端按 config 的 architectures 与专家字段（num_experts、num_local_experts、moe_intermediate_size）判定 MoE（混合专家，多专家 FFN）或 Dense（稠密），无法判定显示 unknown。识别结果只用于排序与标注量化/加速方案、展示处理路线，不单独改变产物二进制；可用配方仍由架构、几何与输入格式决定，识别为 MoE 不等于已接入任意 MoE 推理引擎 |
-| B12 | MoE 模型产出后按显卡型号动态推荐哪个推理引擎？ | 识别为 MoE 时，后端按「本机显卡（nvidia-smi 的 compute_cap）＋模型是否在引擎已发布列表」双重条件给出社区推理引擎选型建议：NVIDIA Blackwell（compute≥12.0，RTX 50 系，sm_120）且模型属于 Basalt 已发布 MoE（Qwen3.8-Flash-Next、DeepSeek-V4.1-Flash）才推荐 Basalt（专为该架构优化、原生 NVFP4、官方口径 Blackwell 更快）;Qwen3.6-35B-A3B 等不在 Basalt 已适配列表的 MoE 即使在 Blackwell 也默认 Strata，但会在建议卡最前面放一条醒目的兼容性提示（compat_check，卡片转警示色）：「Basalt 在本卡更快，但本模型不在 Basalt 已适配列表（仅 Qwen3.8-Flash-Next、DeepSeek-V4.1-Flash、Qwen3.8-27B），请自行核对能否获取或转换兼容的 .basalt 来源，再决定是否改用更快的 Basalt；不能则用下方默认引擎」，把「更快的 Basalt 是否兼容」这个决定交给用户而不是悄悄绕开;若该 MoE 也不在 Strata 已发布列表，提示再追加「以两引擎官方仓库为准」。其余 NVIDIA（40/30/20 系）、AMD、Intel、Apple 或未检测到 NVIDIA 推荐 Strata（支持面广，Basalt 仅 Blackwell 能跑），此时无兼容性提示（Basalt 根本跑不了）;不在两引擎已发布列表的 MoE 架构给 Strata 并附「以官方仓库为准」提示。建议含理由、硬件要求、输入格式、支持模型、备选与官方链接，显示在量化方案上方。这只是选型建议展示层：不集成引擎、不改 .ninfer 产物、不改引擎下载门禁;Dense 与 unknown 不给此建议。区别见 C12，硬件/格式见 C13/C14，资源边界见 D11，格式关系见 J11，傻瓜运行步骤见 J12（Basalt）/J13（Strata）/J14（Dense ninfer+kvmem） |
+| B01 | What goes in the local model path, and why is an existing path still invalid? | The path belongs to the PC running the TurboForge service; select or paste it, paired quotes and leading/trailing spaces are supported, and spaces inside the directory are preserved. For a complete HF fill the model directory and leave Original model source empty; for GGUF pick the specific file. Path exists, files complete, and route supported are three independent checks — handle the explicit missing item |
+| B02 | Which kind of Hugging Face link do I enter? | Use a model repository or an explicit file/revision link; with multiple GGUFs pick the specific file and keep the explicit version; not an arbitrary web page link |
+| B03 | Why does a private or gated model fail to download? | Verify legitimate repository access and license; never ask the user to send an access token to the assistant, and never promise to bypass restrictions |
+| B04 | Can a clean environment with only one GGUF convert? | The release bundle contains no models and cannot depend on the developer's existing directories. First check whether it is a supported standalone import; for other routes verify the original repository — a declaration is parsed automatically, otherwise the user provides the original repository link to fetch only config/tokenizer. A complete Qwen3.5-0.8B Q8_0 single file is supported to generate resources from embedded parameters/vocabulary/merges/template and import standalone, with no original directory; it decodes and re-encodes to Q8_0, is not lossless, and caps context at 1024; missing metadata or other unsupported layouts still must not guess config |
+| B05 | Why does a GGUF still need the original model, and what if config.json is missing? | The supported self-contained Qwen3.5-0.8B Q8_0 GGUF generates config/tokenizer/template automatically; leave Original model source empty. For other routes the original model source should be a matching HF directory with config.json and tokenizer.json/tokenizer.model, or the original repository; a directory containing only GGUF does not qualify. GGUF import does not require original Safetensors when only metadata is read; NVFP4 may need original full-precision tensors. Supplying files still must pass architecture/size support checks — config must not be forged |
+| B06 | What are shards, and can I continue with one missing? | Multiple files together form the complete checkpoint; a missing shard stops the run — supply it from the original repository; never forge tensors |
+| B07 | The file name says NVFP4 — why was it not recognized? | Real evidence is required: quantization config, packed weights, scale/block layout; the name alone is not enough |
+| B08 | Same model name — why can others convert it but I cannot? | Check revision, architecture/geometry, actual format, source completeness, and engine version. The small-model NInfer route needs an adapted bundle; the developer's local adaptation must not be treated as a capability of the plain official engine everywhere; an unknown environment cannot be promised as accepted |
+| B09 | Can an existing `.ninfer` change bits again? | It is not a general `.ninfer` requantizer now; see the available input routes and prefer going back to original weights or a compatible import source |
+| B10 | The download broke — must I restart it? | Current downloads support resume and verified-cache reuse, so it can be re-initiated; an interrupted build does not mean conversion can always resume in place — keep the diagnostics |
+| B11 | How are MoE (mixture of experts) and Dense architectures identified automatically? | During inspection the backend decides MoE (mixture of experts, multi-expert FFN) or Dense from the config's architectures and expert fields (num_experts, num_local_experts, moe_intermediate_size); when it cannot decide it shows unknown. The result is used only to rank and label quantization/acceleration plans and show the processing route — it does not by itself change the artifact binary; available recipes are still decided by architecture, geometry, and input format, and being identified as MoE does not mean any MoE inference engine is wired |
+| B12 | After a MoE model is produced, which inference engine is recommended dynamically by GPU model? | When identified as MoE, the backend gives a community inference-engine recommendation under the double condition "local GPU (compute_cap from nvidia-smi) + model on the engine's published list": only NVIDIA Blackwell (compute≥12.0, RTX 50 series, sm_120) AND a Basalt-published MoE (Qwen3.8-Flash-Next, DeepSeek-V4.1-Flash) recommends Basalt (optimized for that architecture, native NVFP4, officially faster on Blackwell); MoE not on Basalt's adapted list such as Qwen3.6-35B-A3B defaults to Strata even on Blackwell, but a prominent compatibility note (compat_check, card turns warning-colored) is placed at the very top of the recommendation card: "Basalt is faster on this card, but this model is not on Basalt's adapted list (only Qwen3.8-Flash-Next, DeepSeek-V4.1-Flash, Qwen3.8-27B). Verify yourself whether you can obtain or convert a compatible .basalt source before deciding to switch to the faster Basalt; if not, use the default engine below" — handing the "is the faster Basalt compatible" decision to the user instead of quietly sidestepping it; if that MoE is also not on Strata's published list, the note appends "defer to both engines' official repositories". Other NVIDIA (40/30/20 series), AMD, Intel, Apple, or no NVIDIA detected recommends Strata (broad support; Basalt only runs on Blackwell), with no compatibility note then (Basalt simply cannot run); a MoE architecture on neither published list gets Strata plus a "defer to the official repositories" note. The recommendation includes reason, hardware requirements, input format, supported models, alternatives, and official links, shown above the quantization plans. This is only a selection-advice display layer: it does not integrate engines, change the .ninfer artifact, or change engine download gates; Dense and unknown get no such recommendation. Differences in C12, hardware/format in C13/C14, resource boundaries in D11, format relations in J11, plain-language run steps in J12 (Basalt)/J13 (Strata)/J14 (Dense ninfer+kvmem) |
 
-### C. 量化概念与路线（C01–C14）
+### C. Quantization concepts and routes (C01–C14)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| C01 | 量化是什么，会改变模型吗？ | 用更少信息表示权重，可降低存储，可能影响输出；源目录不覆盖，输出是新产物 |
-| C02 | 2/3/4/5/6/8-bit 该怎么理解？ | 编码粒度指标不是全模型质量排名；混合方案和附加元数据使实际 bpw 不同 |
-| C03 | 为什么选 4-bit，大小不是原来的四分之一？ | 原始 dtype、混合精度、scale、嵌入、头部、对齐等影响大小，结合真实产物而非名义位宽推算 |
-| C04 | 4-bit 一定比 8-bit 快吗？ | 不一定，取决于内核、GPU、批量、上下文、带宽与解码开销；比较同条件实测 |
-| C05 | AWQ 跟普通 Q4 一样吗？ | 不一样，算法、校准、packing 和运行内核不同；本项目走独立 HF 路线 |
-| C06 | GPTQ 跟 AWQ 谁更好？ | 没有本项目全模型统一结论；比较当前支持位宽、任务数据、质量与运行成本，不编造统一排名 |
-| C07 | MXFP4、NVFP4、INT4 可以互换吗？ | 不能只按 4-bit 互换；浮点编码、scale 与布局契约不同，使用精确配方 |
-| C08 | Bonsai 和 GPTQ 2-bit 是一回事吗？ | 不是，三值来源导入与 GPTQ 校准编码不同；可用模型、格式与质量证据各自独立 |
-| C09 | GGUF 是量化方法吗？ | 是容器/格式体系，可含不同张量编码；“GGUF”不说明具体位宽与算法 |
-| C10 | 从低 bit 还原高 bit 能恢复能力吗？ | 提高存储精度不会恢复丢失信息；二次量化可能再损失，优先原始高精度来源 |
-| C11 | 为什么按显卡代数排序方案，50 系推荐 NVFP4？ | 检查模型时用 nvidia-smi 读取 compute_cap 识别显卡代数：Blackwell（≥10.0，RTX 50 系）原生支持 FP4/NVFP4，Ada/Hopper（≥8.9，RTX 40 系）原生支持 FP8，Ampere（RTX 30 系）无原生 FP8/FP4。量化方案列表把本卡原生支持的方案排前、再按 bpw 排序，并用 gpu_note 提示「本卡原生 FP4 加速」或「本卡无原生 FP4，需反量化，未必提速」。排序与标注只是展示建议，不改变产物、不改变引擎下载门禁，也不替代「自动推荐」的后端选择；无显卡信息时退回按 bpw 排序且不显示代数标注。原生支持只是硬件能力，实际收益以同条件实测为准 |
-| C12 | Strata 和 Basalt 有什么区别，各推荐什么显卡与场景？ | 两者都是 MIT 开源本地 MoE 推理引擎，Basalt 是 Strata 的分支。Strata（Niko1221/Strata）支持 NVIDIA RTX 20/30/40/50、AMD、Intel Arc(Linux)、Apple Silicon，吃标准 GGUF，专家 GPU→RAM→SSD 三级分层，桌面 App 一键安装，适合非 Blackwell/跨平台/低显存大内存。Basalt（jesdga95/basalt）仅 NVIDIA Blackwell（sm_120，compute 12.0）+ CUDA 13 + 驱动 R580+，吃自包含 .basalt v2，原生 NVFP4，官方口径 Blackwell 上最快，release 包不含 CUDA/Python 需自备，适合 RTX 50 系追求最快。两者都兼容 OpenAI/Anthropic API。按显卡＋模型推荐：Blackwell 且模型在 Basalt 已适配列表（Qwen3.8-Flash-Next、DeepSeek-V4.1-Flash）→Basalt（更快）;Blackwell 但模型未适配（如 Qwen3.6-35B-A3B）→默认 Strata，并在建议卡最前面放醒目兼容性提示「Basalt 更快但未适配，请自行核对兼容后再决定是否改用」;其余显卡→Strata（Basalt 跑不了）。速度数字均仅特定模型/设置，不推广为通用保证 |
-| C13 | Basalt 只支持 Blackwell 显卡吗，硬件与格式要求是什么？ | 是。Basalt 硬性要求 NVIDIA Blackwell GPU（compute capability 12.0 / sm_120）+ CUDA 13，系统仅 Linux x64（AVX2，GCC13+，CMake3.24+）或 Windows 10 1903+ x64（MSVC/VS2022，Ninja），驱动 R580 分支或更新（Linux 最低 580.95.05）。非 Blackwell（40/30/20 系、AMD、Intel、Apple）跑不了，应改用 Strata。release 包（basalt-vX.Y.Z-windows-x64.zip / linux-x64.tar.gz）不含 CUDA 库与 Python 环境，需自备 CUDA13 运行库（cudart、cuBLAS）在 PATH 与 Python3.10+ 的 .venv。输入是自包含 .basalt v2（权重/分词器/MTP/视觉投影/int8 表），专家格式 Unsloth UD quants、Q8_0、NVFP4。支持 Qwen3.8-Flash-Next、DeepSeek-V4.1-Flash、Qwen3.8-27B（dense，v0.4.0 新增）;不含 Qwen3.6-35B-A3B（该 MoE 仅 Strata 发布，故 Blackwell 上默认 Strata，并在建议卡最前面放「Basalt 更快但未适配，请自行核对兼容」提示）。放不下的专家进系统 RAM/SSD，可多卡 expert tier。bin/basalt serve --config basalt_config.json 启动，默认 127.0.0.1:8080 |
-| C14 | Strata 支持哪些显卡、显存与内存档位？ | Strata 支持 NVIDIA GeForce RTX 20/30/40/50 系、AMD Radeon RX 7700/7800/7900、RX 9060/9070、AI PRO R9700（RX 6800/6900 实验性）、Intel Arc(Linux)、Apple Silicon M1+、AMD Ryzen AI Max Strix Halo、NVIDIA DGX Spark(Linux)。12GB 级消费卡即可（README 实测含 RTX 5070 12GB、RTX 3060 12GB），NVIDIA 需 CUDA13/驱动580+。内存按档位（数字=权重 RAM+VRAM 合计，需另留 OS 余量，为估计值）：Qwen3.8-Flash-Next ISTA-DASLab Q2_0 约37.6GB（最快）、IQ2_XS 39.2GB、IQ3_XXS 47GB、IQ3_S 54.8GB（质量最好）;仅编码 Coder 约32GB RAM;Unsloth 4–8bit 需72–136GB。专家 GPU→RAM→SSD 分层，吃标准 GGUF，提供方推荐 ISTA-DASLab→Unsloth→Gyro，用户显式选择优先。strata launch --plan 只预览不下载;桌面 App 或 install.ps1/sh 一键安装，OpenAI/Anthropic API。支持 Qwen3.8-Flash-Next、Qwen3.6-35B-A3B、DeepSeekV4.1-Flash |
+| C01 | What is quantization — does it change the model? | Representing weights with less information can reduce storage and may affect output; the source directory is not overwritten, and the output is a new artifact |
+| C02 | How should I understand 2/3/4/5/6/8-bit? | An encoding-granularity metric, not a whole-model quality ranking; mixed plans and extra metadata make the actual bpw different |
+| C03 | I picked 4-bit — why is the size not a quarter of the original? | Original dtype, mixed precision, scales, embeddings, heads, alignment, etc. affect size; reason from the real artifact, not the nominal bit width |
+| C04 | Is 4-bit always faster than 8-bit? | Not necessarily; it depends on kernel, GPU, batch, context, bandwidth, and decode overhead; compare measurements under identical conditions |
+| C05 | Is AWQ the same as ordinary Q4? | No; algorithm, calibration, packing, and runtime kernel differ; this project takes the isolated HF route |
+| C06 | Which is better, GPTQ or AWQ? | There is no project-wide uniform conclusion; compare currently supported bit widths, task data, quality, and runtime cost — never fabricate a uniform ranking |
+| C07 | Are MXFP4, NVFP4, and INT4 interchangeable? | Not just because they are 4-bit; floating-point encoding, scale, and layout contracts differ — use the exact recipe |
+| C08 | Are Bonsai and GPTQ 2-bit the same thing? | No; ternary-source import and GPTQ calibrated encoding differ; available models, formats, and quality evidence are each independent |
+| C09 | Is GGUF a quantization method? | It is a container/format system that can hold different tensor encodings; "GGUF" does not state a specific bit width or algorithm |
+| C10 | Can restoring low bits to high bits recover ability? | Raising storage precision does not recover lost information; a second quantization may lose more — prefer the original full-precision source |
+| C11 | Why are plans ranked by GPU generation, with NVFP4 recommended on RTX 50? | During inspection nvidia-smi reads compute_cap to identify the GPU generation: Blackwell (≥10.0, RTX 50 series) natively supports FP4/NVFP4, Ada/Hopper (≥8.9, RTX 40 series) natively supports FP8, Ampere (RTX 30 series) has no native FP8/FP4. The quantization plan list puts plans natively supported by this card first, then sorts by bpw, and uses gpu_note to say "native FP4 acceleration on this card" or "no native FP4 on this card; dequantization needed, not necessarily faster". Ranking and labeling are display advice only — they do not change the artifact or engine download gates, and do not replace the backend's "auto recommendation"; without GPU info it falls back to bpw sorting with no generation label. Native support is only a hardware capability; actual gains depend on measurements under identical conditions |
+| C12 | What is the difference between Strata and Basalt, and which GPUs/scenarios does each suit? | Both are MIT-licensed open-source local MoE inference engines; Basalt is a fork of Strata. Strata (Niko1221/Strata) supports NVIDIA RTX 20/30/40/50, AMD, Intel Arc (Linux), Apple Silicon, takes standard GGUF, tiers experts GPU→RAM→SSD, has a one-click desktop app installer, and suits non-Blackwell/cross-platform/low-VRAM-large-RAM. Basalt (jesdga95/basalt) is NVIDIA Blackwell only (sm_120, compute 12.0) + CUDA 13 + driver R580+, takes self-contained .basalt v2, native NVFP4, officially fastest on Blackwell; its release package contains no CUDA/Python so you provide them, and it suits RTX 50 users chasing maximum speed. Both are OpenAI/Anthropic API compatible. Recommend by GPU + model: Blackwell AND model on Basalt's adapted list (Qwen3.8-Flash-Next, DeepSeek-V4.1-Flash) → Basalt (faster); Blackwell but model not adapted (e.g. Qwen3.6-35B-A3B) → default Strata, with a prominent compatibility note at the top of the card: "Basalt is faster but not adapted; verify compatibility yourself before deciding to switch"; other GPUs → Strata (Basalt cannot run). Speed numbers are for specific models/settings only and are not generalized into a universal guarantee |
+| C13 | Does Basalt only support Blackwell GPUs, and what are the hardware/format requirements? | Yes. Basalt hard-requires an NVIDIA Blackwell GPU (compute capability 12.0 / sm_120) + CUDA 13; the system must be Linux x64 (AVX2, GCC13+, CMake3.24+) or Windows 10 1903+ x64 (MSVC/VS2022, Ninja), driver R580 branch or newer (Linux minimum 580.95.05). Non-Blackwell (40/30/20 series, AMD, Intel, Apple) cannot run it — use Strata instead. The release package (basalt-vX.Y.Z-windows-x64.zip / linux-x64.tar.gz) contains no CUDA libraries or Python environment; you must provide the CUDA 13 runtime (cudart, cuBLAS) on PATH and a Python 3.10+ .venv. Input is self-contained .basalt v2 (weights/tokenizer/MTP/vision projection/int8 tables); expert formats are Unsloth UD quants, Q8_0, NVFP4. Supports Qwen3.8-Flash-Next, DeepSeek-V4.1-Flash, Qwen3.8-27B (dense, added in v0.4.0); does NOT include Qwen3.6-35B-A3B (that MoE is published by Strata only, so Blackwell defaults to Strata with a "Basalt is faster but not adapted; verify compatibility yourself" note at the top of the card). Experts that do not fit go to system RAM/SSD, with multi-GPU expert tiers. Start with bin/basalt serve --config basalt_config.json, default 127.0.0.1:8080 |
+| C14 | Which GPUs, VRAM, and RAM tiers does Strata support? | Strata supports NVIDIA GeForce RTX 20/30/40/50 series, AMD Radeon RX 7700/7800/7900, RX 9060/9070, AI PRO R9700 (RX 6800/6900 experimental), Intel Arc (Linux), Apple Silicon M1+, AMD Ryzen AI Max Strix Halo, NVIDIA DGX Spark (Linux). A 12GB-class consumer card is enough (README measurements include RTX 5070 12GB, RTX 3060 12GB); NVIDIA needs CUDA 13/driver 580+. RAM by tier (numbers = combined weight RAM+VRAM, leave extra OS headroom, estimates): Qwen3.8-Flash-Next ISTA-DASLab Q2_0 about 37.6GB (fastest), IQ2_XS 39.2GB, IQ3_XXS 47GB, IQ3_S 54.8GB (best quality); Coder-only encoding about 32GB RAM; Unsloth 4–8bit needs 72–136GB. Experts tier GPU→RAM→SSD, takes standard GGUF; the provider recommends ISTA-DASLab→Unsloth→Gyro, with the user's explicit choice first. strata launch --plan only previews without downloading; one-click install via the desktop app or install.ps1/sh, OpenAI/Anthropic API. Supports Qwen3.8-Flash-Next, Qwen3.6-35B-A3B, DeepSeekV4.1-Flash |
 
-### D. 方案选择与资源（D01–D11）
+### D. Plan selection and resources (D01–D11)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| D01 | 自动推荐是最优吗？ | 是已接入规则下的可用默认，不保证质量/速度最优；解释本次实际自动选择诊断 |
-| D02 | 怎么没有我想要的位宽？ | 受架构/几何/输入/格式/引擎限制，只显示可用配方；不能让 AI 创建未实现路线 |
-| D03 | 有 12GB 显存能跑 27B 吗？ | 需要具体模型/bit、上下文、KV、推测组件和空闲显存；历史 Bonsai 成绩不保证所有 27B |
-| D04 | 转换 RAM 和推理 VRAM 一样吗？ | 不同阶段/资源；解释 planner 当前估计的口径，未知转换峰值不填数 |
-| D05 | 为什么磁盘要比最终文件大？ | 原始下载、解压、处理中间权重、临时输出和最终文件会同时占用 |
-| D06 | 内存不够怎么办？ | 先看是 RAM/VRAM/磁盘；关占用程序、换适合的小模型/配方、调整上下文/并发；换低 bit 不保证解决转换阶段 RAM |
-| D07 | 能 offload 到 CPU 保证跑起来吗？ | 看当前具体引擎能力与参数；不得把资源警告解释成项目已经自动提供任意 offload |
-| D08 | 输出位置为什么不能复用？ | 防止覆盖原始或已有产物；新建独立空输出目录，不删除原模型来“解决” |
-| D09 | 我想质量优先，应该怎样选？ | 从当前可选较高保真方案与同语料基线开始，测自己的任务；不把位宽当唯一标准 |
-| D10 | 参数改了要重新转换吗？ | 区分权重量化/处理参数与运行参数；权重变化需重做，serving 参数通常不改权重，但当前生成脚本/计划绑定方式按实际流程说明 |
-| D11 | MoE 引擎推荐的显存/内存边界，12GB Blackwell 够吗？ | 按显卡推荐只解决「该选哪个引擎」，不保证「跑得动/跑得快」。MoE 专家权重大多放系统 RAM/SSD，显存放常用专家+注意力，门槛是显存+内存+磁盘的组合而非单看显存。本机示例 RTX 5070 Ti Laptop（Blackwell，12GB）+ 约31GB RAM：命中 Basalt（驱动≥R580），但 12GB 显存下大 MoE 专家主要落 RAM/SSD;Strata Qwen3.8-Flash-Next Q2_0 需约37.6GB（RAM+VRAM）、Coder 约32GB，本机内存偏紧，需选低档位/留足余量，不保证流畅跑完整125B。Basalt 同样需足够 RAM 放不进显存的专家。先按引擎内存档位表选 pack，用 --plan/预览看资源计划，实测速度仅特定设置有效。资源不足时换更小模型/更低档位/加内存，不臆测保证 |
+| D01 | Is the auto recommendation optimal? | It is a usable default under the wired rules, not a guarantee of best quality/speed; explain this run's actual auto-selection diagnostic |
+| D02 | Why is the bit width I want missing? | Limited by architecture/geometry/input/format/engine; only available recipes are shown; the AI must not create an unimplemented route |
+| D03 | Can 12GB VRAM run a 27B? | It depends on the specific model/bits, context, KV, speculative components, and free VRAM; historical Bonsai results do not guarantee every 27B |
+| D04 | Are conversion RAM and inference VRAM the same? | Different stages/resources; explain the basis of the planner's current estimate — an unknown conversion peak is never filled with a number |
+| D05 | Why does disk need to be larger than the final file? | Original download, extraction, intermediate processing weights, temporary output, and the final file occupy space at the same time |
+| D06 | What if memory is not enough? | First see whether it is RAM/VRAM/disk; close occupying programs, switch to a suitable smaller model/recipe, adjust context/concurrency; lowering bits does not guarantee solving conversion-stage RAM |
+| D07 | Can offloading to CPU guarantee it runs? | Look at the specific engine's current capabilities and parameters; a resource warning must not be explained as the project already providing arbitrary offload automatically |
+| D08 | Why can the output location not be reused? | To prevent overwriting the original or existing artifacts; create a new separate empty output directory — never "solve" it by deleting the original model |
+| D09 | I want quality first — how should I choose? | Start from the currently available higher-fidelity plans and a same-corpus baseline, and test your own task; do not treat bit width as the only criterion |
+| D10 | Do parameter changes require re-conversion? | Distinguish weight quantization/processing parameters from runtime parameters; weight changes need a redo, serving parameters usually do not change weights, but explain the current generation-script/plan binding per the actual flow |
+| D11 | What are the VRAM/RAM boundaries of the MoE engine recommendation — is a 12GB Blackwell enough? | Recommending by GPU only solves "which engine to pick", not "can it run/run fast". MoE expert weights mostly live in system RAM/SSD, with VRAM holding hot experts + attention; the threshold is the combination of VRAM + RAM + disk, not VRAM alone. Local example RTX 5070 Ti Laptop (Blackwell, 12GB) + about 31GB RAM: hits Basalt (driver≥R580), but under 12GB VRAM large MoE experts mostly land in RAM/SSD; Strata Qwen3.8-Flash-Next Q2_0 needs about 37.6GB (RAM+VRAM), Coder about 32GB — this machine's RAM is tight, so pick a lower tier/leave enough headroom, with no guarantee of smoothly running the full 125B. Basalt likewise needs enough RAM for experts that do not fit in VRAM. First pick a pack by the engine's RAM tier table, use --plan/preview to see the resource plan, and measured speed is valid only for that specific setup. When resources are insufficient, switch to a smaller model/lower tier/add RAM — never speculate a guarantee |
 
-### E. 权重处理、校准与来源（E01–E10）
+### E. Weight processing, calibration, and sources (E01–E10)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| E01 | 不越狱、Abliteration、Heretic 怎么选？ | 默认 none 保留输入；Abliteration 做拒绝方向处理；Heretic 需交互保存，均不保证所有任务质量 |
-| E02 | GGUF/NVFP4 为什么不能再越狱？ | 当前导入直接使用量化来源，编辑 HF 基座不会改到导入张量；要处理则先从高精度开始 |
-| E03 | 已有 Heretic 模型要再处理吗？ | 无此必要时选 none，避免叠加变化；仅凭名称不能证明处理方法和质量 |
-| E04 | 方向文件是什么？ | 与模型 hidden size 匹配的拒绝方向向量；按具体支持格式/来源校验，不随便使用别的模型向量 |
-| E05 | Heretic 为什么弹单独窗口？ | 现有工具需要交互并保存产物；窗口没保存完整权重不会继续假装完成 |
-| E06 | 校准语料是拿来聊天的吗？ | 用于量化/处理估计统计，不是自动训练任意新知识；不同阶段语料目的不同 |
-| E07 | AWQ/GPTQ 不填语料行吗？ | 当前可自动准备固定 revision 的 WikiText-2 train；需联网与资源，记录抽样/哈希，未必最适合领域任务 |
-| E08 | 校准样本越多越好吗？ | 数据代表性、长度、数量影响耗时与统计；不承诺单调改善，按任务验证 |
-| E09 | group size、batch、CPU 激活是什么？ | 解释量化分组/处理批量与内存取舍；当前 HF group 选择按元数据，CPU/磁盘卸载增加耗时与 RAM/磁盘压力 |
-| E10 | imatrix、Engram、n-gram、MTP 来源一样吗？ | 不是；分别属于重要性矩阵、指定架构表或推测组件，按照当前缺失来源字段补齐，不互相代填 |
+| E01 | How do I choose among no abliteration, Abliteration, and Heretic? | Default none keeps the input; Abliteration does refusal-direction processing; Heretic needs an interactive save; none guarantees quality on every task |
+| E02 | Why can GGUF/NVFP4 not be abliterated again? | Current import uses the quantized source directly; editing the HF base does not change imported tensors; to process, start from full precision first |
+| E03 | Does an existing Heretic model need processing again? | Choose none when there is no need, to avoid stacked changes; the name alone cannot prove the processing method or quality |
+| E04 | What is a direction file? | A refusal-direction vector matching the model's hidden size; validated against the specific supported format/source — never casually use another model's vector |
+| E05 | Why does Heretic pop up a separate window? | The existing tool needs interaction and an artifact save; without saving complete weights in that window it will not continue pretending to be done |
+| E06 | Is the calibration corpus for chatting? | It is used to estimate statistics for quantization/processing, not to automatically train arbitrary new knowledge; corpora at different stages serve different purposes |
+| E07 | Can AWQ/GPTQ run without a corpus? | It can currently auto-prepare WikiText-2 train at a pinned revision; this needs network and resources, records sampling/hashes, and may not be the best fit for a domain task |
+| E08 | Are more calibration samples always better? | Data representativeness, length, and count affect time and statistics; no monotonic improvement is promised — verify per task |
+| E09 | What are group size, batch, and CPU activations? | Explain quantization grouping/processing batch and memory trade-offs; current HF group choice follows metadata, and CPU/disk offload adds time and RAM/disk pressure |
+| E10 | Are imatrix, Engram, n-gram, and MTP sources the same? | No; they are respectively an importance matrix, an architecture-specific table, or speculative components — fill them per the current missing-source fields, never substituting one for another |
 
-### F. MTP/DFlash2 与运行参数（F01–F10）
+### F. MTP/DFlash2 and runtime parameters (F01–F10)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| F01 | 推测解码是什么？ | 草稿提出 token、主模型验证的加速机制；需要兼容组件与实现，不是给模型凭空新增能力 |
-| F02 | 我的模型没有头，能自动训练吗？ | 当前不训练；可提供受支持外部组件，或选 auto/关闭，不能强行启用 |
-| F03 | 量化、转格式后 MTP 还能用吗，为什么保留但没加速？ | 兼容路线会保留已有头；保留不等于启用/提速；HF 当前只归档，执行需兼容 NInfer。看 runtime、实际引擎、接受情况与同条件基线 |
-| F04 | HF AWQ/GPTQ 可以用 MTP 吗？ | 现有 HF 服务不执行；带头 auto 会被阻止，想执行用兼容 NInfer；明确关闭时可仅归档 |
-| F05 | MTP 与 DFlash2 能随便互换吗？ | 不行，架构、几何、权重与配置契约不同；只使用已检测/兼容组件 |
-| F06 | draft tokens 越多越快吗？ | 不保证，更多草稿增加成本，收益取决于接受与硬件；用可用参数做同条件测试 |
-| F07 | context 是什么，为什么有 1024 上限？ | 输入与生成受 token 窗口/当前适配引擎约束；该小模型路径有特定上限，不是全站所有模型统一上限 |
-| F08 | KV cache 位宽和权重量化一样吗？ | 不同对象，运行缓存影响显存和数值；换 KV 设置不意味着主权重重新量化 |
-| F09 | 并发大有什么影响？ | 增加同时请求与资源开销；HF 本地服务当前生成并发 1，不能仅通过 UI 数值假定已扩展 |
-| F10 | 停模型再转换会丢文件吗？ | 停的是服务进程，正常产物保留；当前页面要求先释放所属模型服务再转换，AI 不能擅自停止 |
+| F01 | What is speculative decoding? | An acceleration mechanism where a draft proposes tokens and the main model verifies them; it needs compatible components and implementation, and does not add ability to a model out of thin air |
+| F02 | My model has no head — can it train one automatically? | Not currently; you can provide a supported external component, or choose auto/off — it cannot be force-enabled |
+| F03 | After quantization/format conversion can MTP still be used, and why is it kept but not faster? | A compatible route keeps existing heads; kept does not mean enabled/faster; HF currently only archives, and execution needs a compatible NInfer. Look at runtime, the actual engine, acceptance, and a same-condition baseline |
+| F04 | Can HF AWQ/GPTQ use MTP? | The current HF service does not execute it; auto with heads is blocked — to execute, use a compatible NInfer; when explicitly turned off it can archive only |
+| F05 | Can MTP and DFlash2 be swapped freely? | No; architecture, geometry, weights, and config contracts differ; use only detected/compatible components |
+| F06 | Are more draft tokens always faster? | Not guaranteed; more drafts add cost, and the gain depends on acceptance and hardware; test under identical conditions with available parameters |
+| F07 | What is context, and why is there a 1024 cap? | Input and generation are bounded by the token window/current adapted engine; that small-model path has a specific cap, not a site-wide uniform cap for all models |
+| F08 | Is KV cache bit width the same as weight quantization? | Different objects; the runtime cache affects VRAM and numerics; changing KV settings does not mean the main weights are requantized |
+| F09 | What does high concurrency affect? | It increases simultaneous requests and resource overhead; the HF local service currently has generation concurrency 1 — do not assume it scaled just from a UI number |
+| F10 | Will stopping the model and re-converting lose files? | What stops is the service process; normal artifacts are kept; the current page requires releasing the owned model service before converting, and the AI must not stop it on its own |
 
-### G. 构建过程与故障（G01–G10）
+### G. Build process and failures (G01–G10)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| G01 | 一直“准备中”是不是卡了？ | 看当前下载/安装日志、文件增长和错误，不凭时间判断；首次可能大下载，不承诺固定进度 |
-| G02 | 验证失败还算转换成功吗？ | 可能有文件但 GPU 使用未通过，不能从文件存在推导可启动；查看 smoke 阶段错误 |
-| G03 | converted 和 validated 区别？ | converted 仅已转换（可能跳过验证），validated 才有对应验证证据；直接启动要求本次 verified 状态 |
-| G04 | 刷新网页会不会丢任务？ | 现有任务状态可恢复；后端重启/进程中断不等于后台继续执行，查看实际任务记录 |
-| G05 | 可以同时转多个或边跑边转吗？ | 当前 BuildManager 限制并发构建/服务冲突，按界面提示等待或手动停止所属服务 |
-| G06 | 为什么提示 Torch CUDA 不可用？ | 确认实际 worker 的 Torch 与驱动，系统有显卡不等于该 Python 可使用 CUDA；优先一键诊断日志 |
-| G07 | 版本不一致警告能忽略吗？ | 区分 warning/error；版本差异意味着兼容证据不足，使用匹配整合包/固定引擎更容易复现 |
-| G08 | 构建中断后从哪一步继续？ | 当前下载可复用，但不保证任意转换恢复点；保留日志，按任务状态重新构建到新输出，不篡改 manifest |
-| G09 | 报错只显示一行该怎么办？ | 展开当前阶段日志，复制脱敏错误及前后文；不要提交整盘路径、token、完整模型权重 |
-| G10 | AI 说能继续，按钮仍然禁用？ | 后端门禁为准；AI 只能解释，列出禁用原因并定位，不让用户改状态文件绕过 |
+| G01 | It keeps saying "preparing" — is it stuck? | Look at the current download/install log, file growth, and errors — do not judge by time; the first run may be a large download, and no fixed progress is promised |
+| G02 | If validation fails, does conversion still count as successful? | There may be a file but GPU use did not pass; runnability cannot be inferred from file existence; check the smoke-stage error |
+| G03 | Difference between converted and validated? | converted only means converted (validation may have been skipped); validated has the corresponding validation evidence; direct start requires this run's verified state |
+| G04 | Will refreshing the page lose the task? | Existing task state is recoverable; a backend restart/process interruption does not mean background execution continues — check the actual task record |
+| G05 | Can I convert several at once, or convert while running? | The current BuildManager limits concurrent builds/service conflicts; wait per the UI hint or manually stop the owned service |
+| G06 | Why does it say Torch CUDA is unavailable? | Confirm the actual worker's Torch and driver; having a GPU in the system does not mean that Python can use CUDA; prefer the one-click diagnostic log |
+| G07 | Can the version-mismatch warning be ignored? | Distinguish warning/error; a version difference means insufficient compatibility evidence — a matching bundle/pinned engine reproduces more easily |
+| G08 | After an interrupted build, which step resumes? | Current downloads are reusable, but an arbitrary conversion resume point is not guaranteed; keep logs, rebuild to a new output per task state, and never tamper with the manifest |
+| G09 | The error shows only one line — what do I do? | Expand the current stage log and copy the redacted error with context; do not submit whole-drive paths, tokens, or complete model weights |
+| G10 | The AI says it can continue, but the button is still disabled? | The backend gate decides; the AI can only explain — list the disable reason and locate it, and never let the user edit the state file to bypass |
 
-### H. 质量报告（H01–H10）
+### H. Quality reports (H01–H10)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| H01 | 模型量化后质量损失、变笨了怎么办，PPL 是什么？ | 低位宽和不合适的校准语料可能增加质量损失；先看同语料 PPL 门禁和真实任务表现，必要时提高位宽、使用匹配领域的独立校准及评测集。PPL 是给定语料上的预测困惑度，不是所有任务准确率 |
-| H02 | PPL 增幅怎么计算？ | `(当前 PPL / 对照 PPL - 1) × 100%`；只有有效同条件对照才有意义 |
-| H03 | 对照模型必须完全一样吗？ | 来源、分词器、处理阶段、语料和评测设置应匹配；不能拿越狱前后差异当纯量化损失 |
-| H04 | 门禁 10% 是官方安全值吗？ | 是用户设置的接受阈值，不是普适质量保证；依据自己的应用验证 |
-| H05 | 为什么 quality-rejected 不能启动？ | 当前选择的质量要求未满足或测量失败，系统保留真实报告；调整方案/语料后重新评测，不建议直接改 manifest |
-| H06 | 没有 PPL 数值表示零损失吗？ | 不表示；看 not_measured/refused/测量错误，未知不等于 0 |
-| H07 | HF 的参考为什么在 CPU 跑？ | 当前高精度参考路径用 CPU FP32，量化模型用 GPU；耗 RAM/时间，dtype 与设备差异也是比较限制 |
-| H08 | packed 模型能拿自己做对照吗？ | 不能当作已知高精度基线证明量化无损；没有可确认参考时拒绝相应质量证明 |
-| H09 | 校准语料能同时当评测集吗？ | 应避免重叠，遵循当前实现的数据隔离与可追溯设置；否则效果可能过于乐观 |
-| H10 | PPL 通过但聊天变差怎么办？ | 用真实任务补测代码/数学/长上下文/指令遵循；PPL 不覆盖所有维度，检查模板与参数也有必要 |
+| H01 | The model lost quality after quantization and got dumber — what now, and what is PPL? | Low bit width and unsuitable calibration corpus can increase quality loss; first look at the same-corpus PPL gate and real task performance, and if needed raise the bit width and use domain-matched independent calibration and evaluation sets. PPL is predictive perplexity on a given corpus, not accuracy on every task |
+| H02 | How is the PPL increase computed? | `(current PPL / baseline PPL - 1) × 100%`; only a valid same-condition baseline makes it meaningful |
+| H03 | Must the baseline model be exactly identical? | Source, tokenizer, processing stage, corpus, and evaluation settings should match; the pre/post-abliteration difference must not be treated as pure quantization loss |
+| H04 | Is the 10% gate an official safe value? | It is a user-set acceptance threshold, not a universal quality guarantee; validate against your own application |
+| H05 | Why can quality-rejected not start? | The currently chosen quality requirement was not met or measurement failed, and the system keeps the real report; adjust the plan/corpus and re-evaluate — editing the manifest directly is not advised |
+| H06 | Does no PPL number mean zero loss? | No; look at not_measured/refused/measurement error — unknown is not 0 |
+| H07 | Why does the HF reference run on CPU? | The current full-precision reference path uses CPU FP32 while the quantized model uses GPU; it costs RAM/time, and dtype/device differences are also a comparison limitation |
+| H08 | Can a packed model use itself as the baseline? | It cannot serve as a known full-precision baseline proving quantization lossless; without a confirmable reference the corresponding quality proof is refused |
+| H09 | Can the calibration corpus also be the evaluation set? | Overlap should be avoided, following the current implementation's data isolation and traceability settings; otherwise results may be too optimistic |
+| H10 | PPL passed but chat got worse — what now? | Add real-task tests for code/math/long context/instruction following; PPL does not cover every dimension, and checking the template and parameters is also necessary |
 
-### I. 速度与资源报告（I01–I10）
+### I. Speed and resource reports (I01–I10)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| I01 | prefill 和 decode 有什么区别？ | 前者处理输入提示，后者逐 token 输出，两个 tok/s 不混比 |
-| I02 | 首 token 很慢但后面快正常吗？ | 首次加载、输入长度与预填充会影响首 token；只有测量记录能分清具体瓶颈 |
-| I03 | measured/configured/refused/not_measured？ | 分别是真实测量、仅配置、拒绝、未测；不能把配置数字宣传成实测性能 |
-| I04 | 为什么我的速度不如 README？ | GPU、模型/revision、量化、KV、上下文、推测、并发与测试方法不同；先建立同条件基线 |
-| I05 | 27B 能 180 tok/s，我也可以吗？ | 是特定历史 RTX 5070 Ti Laptop+Bonsai+MTP3 测量，不可外推；引用时带来源/条件 |
-| I06 | 接受率高就说明 MTP 好吗？ | 语料与方法影响结果，历史平铺语料的接受率不能代表真实请求 |
-| I07 | Torch 峰值就是显卡总占用吗？ | 不等于，当前 HF 指标口径为 Torch 分配峰值，不包含所有进程/驱动开销或量化阶段总峰值 |
-| I08 | 预计能放下为什么实际 OOM？ | 权重外还有 KV、激活、临时 buffer、其他应用和阶段差异，估计有假设；根据实际阶段诊断 |
-| I09 | 同一量化两次报告可以直接比吗？ | 还需对齐硬件、输入、context、KV、并发与推测；不同采样设置不当作算法优劣证据 |
-| I10 | 怎样验证更快又不明显变差？ | 固定输入/运行配置做速度基线，再看同语料质量与实际任务；结果展示测量条件和限制 |
+| I01 | Difference between prefill and decode? | The former processes the input prompt, the latter outputs token by token; the two tok/s numbers are not compared interchangeably |
+| I02 | First token is slow but later ones fast — normal? | First load, input length, and prefill affect the first token; only measurement records can separate the specific bottleneck |
+| I03 | measured/configured/refused/not_measured? | Respectively real measurement, configuration only, refused, and not measured; a configured number must not be advertised as measured performance |
+| I04 | Why is my speed worse than the README? | GPU, model/revision, quantization, KV, context, speculation, concurrency, and test method differ; establish a same-condition baseline first |
+| I05 | A 27B can do 180 tok/s — can I? | That is a specific historical RTX 5070 Ti Laptop+Bonsai+MTP3 measurement and cannot be extrapolated; cite it with source/conditions |
+| I06 | Does a high acceptance rate mean MTP is good? | Corpus and method affect results; acceptance on a historical tiled corpus does not represent real requests |
+| I07 | Is the Torch peak the GPU's total usage? | No; the current HF metric basis is Torch's allocation peak, excluding all process/driver overhead or the quantization-stage total peak |
+| I08 | It was estimated to fit — why actual OOM? | Beyond weights there are KV, activations, temporary buffers, other applications, and stage differences; estimates have assumptions — diagnose by the actual stage |
+| I09 | Can two reports of the same quantization be compared directly? | Hardware, input, context, KV, concurrency, and speculation must also align; different sampling settings are not evidence of algorithm superiority |
+| I10 | How do I verify faster without obviously worse? | Fix input/runtime config for a speed baseline, then look at same-corpus quality and real tasks; show measurement conditions and limitations with the results |
 
-### J. 产物启动与应用接入（J01–J14）
+### J. Artifact startup and application integration (J01–J14)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| J01 | 转完后怎么真正跑起来？ | 确认本次 validated/门禁通过→点启动模型 API→等 ready→复制返回的 base_url→在客户端填模型 ID→短句验证 |
-| J02 | `.ninfer` 用什么打开？ | 用匹配 NInfer 引擎/页面生成启动脚本；不是任意 GGUF/HF 加载器都能识别 |
-| J03 | AWQ/GPTQ 产物在哪，怎么跑？ | 当前输出 `model-hf/`，走独立 HF worker；已验证后页面启动或生成的 `scripts/run.bat`，不用 NInfer 加载 |
-| J04 | 为什么提示端口占用？ | 停止明确归属的占用服务，或按当前流程换端口后更新计划/重建；不要让 AI 杀未知进程 |
-| J05 | starting 一直不变？ | 进程启动不等于 ready；看当前 serve.log、模型加载、显存、端口和退出状态 |
-| J06 | 客户端里 base_url 填什么？ | 复制实际服务返回的 `http://127.0.0.1:<端口>/v1`；客户端若要完整 endpoint 则追加一次 `/chat/completions` |
-| J07 | 模型名字怎么填？ | 从该服务 `/v1/models` 读取真实 id；不是文件名或 UI 标签猜测，某些服务不支持列表时按配置手填 |
-| J08 | 本地 API 需要 Key 吗？ | 当前内置 HF loopback 服务无此鉴权要求；客户端必须填时可用其要求的占位值，但这不构成认证；其他引擎/上游按实际服务配置 |
-| J09 | 能接聊天软件、图片或工具调用吗？ | 文本兼容客户端可按接口接入；当前 HF 不支持图片、tools、结构化输出和任意参数，不能因兼容文本就承诺全部功能 |
-| J10 | 能让另一台电脑访问吗？ | 默认 loopback 仅本机；公开部署需新增认证/权限/网络保护，不能简单改 host 后认为安全完成 |
-| J11 | 产出的 .ninfer 能直接用 Strata 或 Basalt 跑吗，转完该用哪个？ | 不能。.ninfer 只给配套 NInfer；Strata 要另下 GGUF，Basalt 要另下 .basalt，都不能直接喂 .ninfer。页面「后续推理建议」按架构和显卡给一个，并附仓库链接。Dense 用 ninfer-fusion-kvmem（J14，https://github.com/1314521gjy/ninfer-fusion-kvmem，Apache-2.0；无 LICENSE 的 melis2023/ninfer-kvmem-actkv 不推荐）。MoE 且 compute 正好 12.0、模型又是 Flash-Next 或 DeepSeek-V4.1-Flash 时用 Basalt（J12，https://github.com/jesdga95/basalt）。其他 MoE 用 Strata（J13，https://github.com/Niko1221/Strata）；数据中心 compute 10.0 不是 RTX 50。这些建议不集成、不自动下载。 |
-| J12 | 50 系显卡用 Basalt 跑 MoE 的完整傻瓜步骤？ | 适用：compute 正好 12.0、Win10 1903+ 或 Win11，模型是 Qwen3.8-Flash-Next 或 DeepSeek-V4.1-Flash。compute 10.0 与 Qwen3.6-35B-A3B 改 J13。不能把 .ninfer 当 .basalt。① 自备 CUDA 13、驱动 R580+、Python 3.10+；打开 https://github.com/jesdga95/basalt/releases 下 basalt-v0.4.0-windows-x64.zip。② 另下对应 .basalt v2。③ 先分别询问上下文 token 和并发，得到正整数前不写脚本。④ basalt_config.json 只写已核对结构：version=2、models[0].model=用户的 .basalt 绝对路径、gpu="0"、kv 按模型默认（Flash-Next 用 fp16，DeepSeek 用 fp8）、server.port=8080。没有核对过的 concurrency 字段禁止写入；并发大于 1 时 bat 先 echo「本次按单请求启动」。⑤ start-basalt.bat 只用 cmd：@echo off、chcp 65001、setlocal EnableExtensions、cd /d "%~dp0"；引擎或模型缺失则 echo、pause、exit /b 1。启动行："bin\\basalt.exe" serve --config "%~dp0basalt_config.json" --max-context 用户上下文。最后 pause。⑥ 打开 http://127.0.0.1:8080/v1/models 再发短对话。 |
-| J13 | 非 50 系显卡（或 Qwen3.6-35B-A3B）用 Strata 跑 MoE 的完整傻瓜步骤？ | 适用：compute 不是 12.0 的 MoE，以及任何卡上的 Qwen3.6-35B-A3B。不能把 .ninfer 改成 GGUF。① 打开 https://github.com/Niko1221/Strata/releases 安装 Strata-0.2.13-windows-x64-setup.exe，确认 strata.exe 可用。② 另下 GGUF：35B-A3B 用 Unsloth UD-Q4_K_XL、UD-Q6_K_XL 或 Q8_0；Flash-Next 用 ISTA-DASLab Q2_0、IQ2_XS、IQ3_XXS、IQ3_S。③ 先分别询问上下文 token 和并发。已核对命令只有 strata launch --family --model --plan，没有核对上下文或并发旗标。④ start-strata.bat 只用 cmd：@echo off、chcp 65001、setlocal EnableExtensions、cd /d "%~dp0"；where strata.exe 失败或 GGUF 不存在则 echo、pause、exit /b 1。启动前 echo 用户要的上下文和并发，并写明「当前已核对命令无法传入这两项」。预览命令只写 strata.exe launch --family 用户族 --model 用户档位 --plan。用户确认后第二个 bat 去掉 --plan。禁止添加未核对旗标。最后 pause。⑤ 用进程打印的地址打开 /v1/models 再发短对话。NVIDIA 需 CUDA 13、驱动 580+。 |
-| J14 | Dense 模型用 ninfer+kvmem 跑起来的完整傻瓜步骤？ | 适用：TurboForge 产出的 Dense .ninfer。推荐 https://github.com/1314521gjy/ninfer-fusion-kvmem（Apache-2.0）。https://github.com/melis2023/ninfer-kvmem-actkv 没有 LICENSE，不推荐。① Releases tag 只用 engine-v0.11.0-kvmem-20261008。RTX 50 下 ninfer-serve-120a.exe，40 系 -89，30 系 -86，并核对 SHA256SUMS.txt。引擎和模型放英文路径。② 助手必须先分别询问上下文 token 数和并发数，得到正整数前不写脚本。③ 写 start-fusion.bat，只用 cmd：@echo off、chcp 65001、setlocal EnableExtensions、cd /d "%~dp0"；if not exist 引擎或模型则 echo、pause、exit /b 1。同一 bat 内 set NINFER_KV_WINDOW=16384、NINFER_KV_RETRIEVE=8192、NINFER_HOST_PAGEABLE=1、NINFER_KV_REUSE_HOSTBACKED=1；三值模型再 set NINFER_TERNARY_KVMEM_SCORE_QUERY_TAIL=64。启动行把用户上下文写入 --max-context，把用户并发写入 --max-concurrency，并带 --host 127.0.0.1 --port 8091 --kv-dtype k8v4 --host-kv-mib 16384 --prefill-chunk 1024 --max-shared-prefixes 0。12GB 卡 --kv-capacity 用 8192，更大显存才可用文档中的 17920；--host-kv-mib 16384 需要至少 16GB 空闲内存，不够就先问用户再减小。最后一行 pause。④ 先不要加 --spec。窗口出现 engine ready 后，另开终端访问 http://127.0.0.1:8091/v1/models，再问「17+25 只回数字」。请求长过 --kv-capacity 时答案不可信，改用仓库 gateway\\chat_gateway.py。⑤ 排错：缺 DLL 就把 CUDA 13/FFmpeg/libcurl 放 exe 同目录；显存不足先降 --kv-capacity；CUDA Graph 失败加 --no-cuda-graph；中文路径读不出就改英文路径。 |
+| J01 | After conversion, how do I actually run it? | Confirm this run is validated/gate passed → click Start model API → wait for ready → copy the returned base_url → fill the model ID in the client → verify with a short sentence |
+| J02 | What opens a `.ninfer`? | A matching NInfer engine/the page-generated launch script; not every GGUF/HF loader recognizes it |
+| J03 | Where is the AWQ/GPTQ artifact and how do I run it? | Current output is `model-hf/`, via the isolated HF worker; after validation, start from the page or the generated `scripts/run.bat` — do not load with NInfer |
+| J04 | Why does it say the port is occupied? | Stop the occupying service you clearly own, or change the port per the current flow and update/rebuild the plan; never let the AI kill unknown processes |
+| J05 | starting never changes? | A process starting is not ready; look at the current serve.log, model loading, VRAM, port, and exit state |
+| J06 | What goes in base_url in the client? | Copy the actual service-returned `http://127.0.0.1:<port>/v1`; if the client wants a full endpoint, append `/chat/completions` once |
+| J07 | How do I fill the model name? | Read the real id from that service's `/v1/models`; not a guess from the file name or UI label; when a service does not support listing, fill it manually per config |
+| J08 | Does the local API need a key? | The current built-in HF loopback service has no such auth requirement; when a client forces one, use its required placeholder value, but that is not authentication; other engines/upstreams follow their actual service config |
+| J09 | Can it connect to chat software, images, or tool calls? | Text-compatible clients can integrate per the interface; the current HF does not support images, tools, structured output, or arbitrary parameters — text compatibility does not promise every feature |
+| J10 | Can another computer access it? | Default loopback is local-only; public deployment needs added authentication/permissions/network protection — simply changing host does not make it safely done |
+| J11 | Can the produced .ninfer run directly in Strata or Basalt, and which should I use after conversion? | No. .ninfer is only for the matching NInfer; Strata needs a separate GGUF download and Basalt a separate .basalt — neither can be fed .ninfer directly. The page's "Inference engine recommendation" gives one by architecture and GPU, with repository links. Dense uses ninfer-fusion-kvmem (J14, https://github.com/1314521gjy/ninfer-fusion-kvmem, Apache-2.0; melis2023/ninfer-kvmem-actkv has no LICENSE and is not recommended). MoE with compute exactly 12.0 AND model Flash-Next or DeepSeek-V4.1-Flash uses Basalt (J12, https://github.com/jesdga95/basalt). Other MoE uses Strata (J13, https://github.com/Niko1221/Strata); datacenter compute 10.0 is not RTX 50. These recommendations do not integrate or auto-download. |
+| J12 | Complete plain-language steps to run MoE with Basalt on an RTX 50 card? | Applies to: compute exactly 12.0, Win10 1903+ or Win11, model Qwen3.8-Flash-Next or DeepSeek-V4.1-Flash. compute 10.0 and Qwen3.6-35B-A3B go to J13. Never treat .ninfer as .basalt. ① Provide CUDA 13, driver R580+, Python 3.10+ yourself; open https://github.com/jesdga95/basalt/releases and download basalt-v0.4.0-windows-x64.zip. ② Separately download the matching .basalt v2. ③ First ask separately for context tokens and concurrency; do not write the script before getting positive integers. ④ basalt_config.json contains only the verified structure: version=2, models[0].model=the user's absolute .basalt path, gpu="0", kv per model default (Flash-Next fp16, DeepSeek fp8), server.port=8080. Writing an unverified concurrency field is forbidden; when concurrency > 1 the bat first echoes "This run starts with a single request". ⑤ start-basalt.bat uses cmd only: @echo off, chcp 65001, setlocal EnableExtensions, cd /d "%~dp0"; if the engine or model is missing then echo, pause, exit /b 1. Launch line: "bin\\basalt.exe" serve --config "%~dp0basalt_config.json" --max-context user-context. End with pause. ⑥ Open http://127.0.0.1:8080/v1/models then send a short chat. |
+| J13 | Complete plain-language steps to run MoE with Strata on a non-RTX-50 card (or Qwen3.6-35B-A3B)? | Applies to: MoE with compute not 12.0, and Qwen3.6-35B-A3B on any card. Never rename .ninfer to GGUF. ① Open https://github.com/Niko1221/Strata/releases and install Strata-0.2.13-windows-x64-setup.exe; confirm strata.exe works. ② Separately download GGUF: 35B-A3B uses Unsloth UD-Q4_K_XL, UD-Q6_K_XL or Q8_0; Flash-Next uses ISTA-DASLab Q2_0, IQ2_XS, IQ3_XXS, IQ3_S. ③ First ask separately for context tokens and concurrency. The only verified command is strata launch --family --model --plan; no context or concurrency flag has been verified. ④ start-strata.bat uses cmd only: @echo off, chcp 65001, setlocal EnableExtensions, cd /d "%~dp0"; if where strata.exe fails or the GGUF does not exist then echo, pause, exit /b 1. Before launching, echo the user's requested context and concurrency and state "the currently verified command cannot pass these two". The preview command writes only strata.exe launch --family user-family --model user-tier --plan. After user confirmation a second bat drops --plan. Adding unverified flags is forbidden. End with pause. ⑤ Use the address printed by the process to open /v1/models then send a short chat. NVIDIA needs CUDA 13, driver 580+. |
+| J14 | Complete plain-language steps to run a Dense model with ninfer+kvmem? | Applies to: Dense .ninfer produced by TurboForge. Recommended: https://github.com/1314521gjy/ninfer-fusion-kvmem (Apache-2.0). https://github.com/melis2023/ninfer-kvmem-actkv has no LICENSE and is not recommended. ① Use only Releases tag engine-v0.11.0-kvmem-20261008. On RTX 50 use ninfer-serve-120a.exe, 40 series -89, 30 series -86, and verify SHA256SUMS.txt. Put engine and model on an English path. ② The assistant must first ask separately for context token count and concurrency count; do not write the script before getting positive integers. ③ Write start-fusion.bat, cmd only: @echo off, chcp 65001, setlocal EnableExtensions, cd /d "%~dp0"; if not exist engine or model then echo, pause, exit /b 1. In the same bat set NINFER_KV_WINDOW=16384, NINFER_KV_RETRIEVE=8192, NINFER_HOST_PAGEABLE=1, NINFER_KV_REUSE_HOSTBACKED=1; for a ternary model also set NINFER_TERNARY_KVMEM_SCORE_QUERY_TAIL=64. The launch line writes the user's context into --max-context and the user's concurrency into --max-concurrency, with --host 127.0.0.1 --port 8091 --kv-dtype k8v4 --host-kv-mib 16384 --prefill-chunk 1024 --max-shared-prefixes 0. On a 12GB card use --kv-capacity 8192; only larger VRAM may use the documented 17920; --host-kv-mib 16384 needs at least 16GB free RAM — if not enough, ask the user first then reduce. Last line pause. ④ Do not add --spec yet. After the window shows engine ready, open another terminal to http://127.0.0.1:8091/v1/models, then ask "17+25, reply with the number only". When the request is longer than --kv-capacity the answer is untrustworthy — switch to the repository's gateway\\chat_gateway.py. ⑤ Troubleshooting: missing DLL → put CUDA 13/FFmpeg/libcurl beside the exe; insufficient VRAM → lower --kv-capacity first; CUDA Graph failure → add --no-cuda-graph; a Chinese path that cannot be read → switch to an English path. |
 
-### K. AI 自身配置与隐私（K01–K10）
+### K. AI's own configuration and privacy (K01–K10)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| K01 | AI 的 URL、模型、Key 从哪里来？ | 由用户选定的服务商/自建服务提供，填实际兼容 API 根地址、模型 ID、访问 Key；本项目不附赠额度 |
-| K02 | 助手与我要转换的模型一样吗？ | 可独立，外部助手帮助本机转换；需要时也可接已启动兼容本机模型，但不能自己尚未运行就充当可用助手 |
-| K03 | 为什么连接测试失败？ | 依次看地址根路径、模型 ID、鉴权/权限、额度、网络/证书与协议能力；按真实错误说明，不让用户把 Key 贴到聊天 |
-| K04 | Key 放 `.env` 绝对不会泄露吗？ | 明文配置仍需后端隔离、忽略/打包排除、文件权限与日志脱敏；不能放 VITE 变量或前端包 |
-| K05 | 弹窗填的 Key 保存在哪里？ | 首版设计默认后端会话内存，重启/过期丢失；只有管理员开启后用户明确选择才保存本机 `.env` |
-| K06 | 刷新/重启后配置为什么不同？ | 按会话覆盖、环境变量、`.env` 优先级解释实际来源，重启清内存；环境变量可能覆盖刚保存的文件 |
-| K07 | 页面哪些内容会发到云端？ | 所选文字、问题与预览中勾选的脱敏业务摘要；日志默认不附，发送前可编辑/删除；目标域名清楚显示 |
-| K08 | 能完全不把资料发到外网吗？ | 选择明确允许的本机兼容服务或只用离线帮助；第三方服务保留策略取决于该服务，项目不能替其保证 |
-| K09 | AI 会自动改配置、执行命令吗？ | 首版只读与导航，回答不执行；正常业务操作仍用既有按钮和门禁 |
-| K10 | AI 答错、没找到、额度用完怎么办？ | 看知识引用/实际诊断，使用离线帮助；提供脱敏问题和 request ID；不把 AI 回答视为执行成功证明 |
+| K01 | Where do the AI's URL, model, and key come from? | Provided by the user's chosen vendor/self-hosted service; fill the actual compatible API root address, model ID, and access key; this project bundles no quota |
+| K02 | Is the assistant the same as the model I want to convert? | They can be independent; an external assistant helps local conversion; when needed it can also connect to an already-started compatible local model, but it cannot act as a usable assistant before it itself runs |
+| K03 | Why does the connection test fail? | Check in order: address root path, model ID, auth/permissions, quota, network/certificates, and protocol capability; explain per the real error — never let the user paste the key into chat |
+| K04 | Is a key in `.env` absolutely never leaked? | Plaintext config still needs backend isolation, ignore/packaging exclusion, file permissions, and log redaction; it must not go in VITE variables or the frontend bundle |
+| K05 | Where is the key entered in the dialog saved? | The first-version design defaults to backend session memory, lost on restart/expiry; only after an admin enables it and the user explicitly chooses is it saved to the local `.env` |
+| K06 | Why is the config different after refresh/restart? | Explain the actual source by the priority of session override, environment variables, `.env`; restart clears memory; environment variables may override the just-saved file |
+| K07 | Which page content is sent to the cloud? | Selected text, the question, and the redacted business summary checked in the preview; logs are not attached by default and can be edited/deleted before sending; the target domain is shown clearly |
+| K08 | Can I keep everything off the external network entirely? | Choose an explicitly allowed local compatible service or use offline help only; a third-party service's retention policy depends on that service — the project cannot guarantee it for them |
+| K09 | Will the AI change config or run commands automatically? | The first version is read-only and navigation; answers do not execute; normal business operations still use the existing buttons and gates |
+| K10 | What if the AI answers wrong, finds nothing, or runs out of quota? | Look at knowledge citations/actual diagnostics and use offline help; provide the redacted question and request ID; never treat an AI answer as proof of successful execution |
 
-### L. 维护、迁移与未知问题（L01–L10）
+### L. Maintenance, migration, and unknown problems (L01–L10)
 
-| ID | 用户可能怎么问 | 回答要点/下一步 |
+| ID | How a user might ask | Answer points / next step |
 |---|---|---|
-| L01 | 我把产物移动到另一台机器就能跑吗？ | 需相同格式支持、匹配引擎/运行库/驱动与路径；生成脚本可能含原路径，需核实，不保证跨机器即用 |
-| L02 | 哪些文件可删除节省空间？ | 区分原模型、下载缓存、中间权重、最终产物、专用环境；先停任务/服务并核对依赖，不在回答里自动删除 |
-| L03 | 用户数据会打进分享包吗？ | 发布脚本应显式排除模型/缓存/秘密/会话；以 ZIP 实际检查为准，不能仅靠 `.gitignore` |
-| L04 | 源代码更新了为什么 AI 还说旧功能？ | 检查运行包版本和知识版本；业务变更同步更新条目与覆盖测试，不把过时 docs 原样喂给模型 |
-| L05 | 如何报告问题让维护者看懂？ | 带版本/路线、脱敏模型标识、阶段/错误 code、相关日志片段和 request ID；不附 Key/权重/私密完整路径 |
-| L06 | 为什么以前成功、现在失败？ | 比较模型 revision/文件哈希、工具版本、环境与资源、运行参数；不要无证据归因于量化算法 |
-| L07 | 历史报告在哪看，能重现吗？ | 按当前 manifest/artifacts 的实际位置查看；需要对应输入/版本/命令，不把其他构建的数字嫁接过来 |
-| L08 | 我能忽略 warning 吗？ | 分析该 warning 的具体风险与阶段；warning 不总是阻断，error/质量拒绝不能当普通提示跳过 |
-| L09 | 帮助里没有我的错误怎么办？ | 展示未知错误与阶段，收集有界脱敏证据；提供通用路径/权限/资源/服务诊断，不猜不存在的 code |
-| L10 | 有没有“保证所有模型零难度”的模式？ | 当前没有；通过动态支持矩阵、具体错误和站内帮助降低操作门槛，无法消除外部权限/硬件/算法限制 |
+| L01 | Can I move the artifact to another machine and just run it? | It needs the same format support, matching engine/runtime/driver, and paths; generated scripts may contain the original path and need checking — cross-machine plug-and-play is not guaranteed |
+| L02 | Which files can I delete to save space? | Distinguish original model, download cache, intermediate weights, final artifact, and dedicated environment; stop tasks/services and check dependencies first — never auto-delete in an answer |
+| L03 | Will user data be packed into a shared bundle? | The release script should explicitly exclude models/cache/secrets/sessions; go by the actual ZIP inspection, not just `.gitignore` |
+| L04 | The source updated — why does the AI still describe old features? | Check the running package version and knowledge version; business changes update entries and coverage tests in sync — never feed stale docs to the model as-is |
+| L05 | How do I report a problem so maintainers understand? | Include version/route, redacted model identifier, stage/error code, relevant log excerpt, and request ID; no keys/weights/private full paths |
+| L06 | Why did it succeed before and fail now? | Compare model revision/file hashes, tool versions, environment and resources, runtime parameters; do not attribute it to the quantization algorithm without evidence |
+| L07 | Where are historical reports, and can they be reproduced? | Look at the actual location of the current manifest/artifacts; reproduction needs the corresponding inputs/versions/commands — never graft numbers from another build |
+| L08 | Can I ignore a warning? | Analyze that warning's specific risk and stage; a warning does not always block, but an error/quality rejection must not be skipped as an ordinary hint |
+| L09 | My error is not in the help — what now? | Show the unknown error and stage, collect bounded redacted evidence; provide general path/permission/resource/service diagnostics — never guess a nonexistent code |
+| L10 | Is there a mode that "guarantees zero difficulty for every model"? | Not currently; the dynamic support matrix, specific errors, and in-app help lower the operation barrier, but external permission/hardware/algorithm limits cannot be removed |
 
-## 5. 从转换成功到第一次聊天：站内引导正文
+## 5. From successful conversion to the first chat: in-app guidance body
 
-### 5.1 正常路径
+### 5.1 Normal path
 
-1. 在本次构建卡确认状态是「验证通过」。如果开启质量门禁，还要查看门禁结果。不要只看输出文件存在。
-2. 点击「启动模型 API」，等待 `ready`。如果模型较大，先查看启动日志，不反复点击启动。
-3. 复制页面返回的实际 `base_url`。打开支持文本 Chat Completions 的客户端，将模型 ID 填为该服务 `/v1/models` 返回的值；鉴权按该服务实际配置。
-4. 先发一句短问题验证输入/输出，再逐步增加上下文。若出错，展开当前构建的 `logs/serve.log` 或页面显示的实际日志位置。
+1. On this build's card confirm the state is "Validation passed". If the quality gate is on, also check the gate result. Do not just look at the output file existing.
+2. Click "Start model API" and wait for `ready`. If the model is large, check the startup log first instead of clicking start repeatedly.
+3. Copy the actual `base_url` returned by the page. Open a client that supports text Chat Completions and fill the model ID with the value returned by that service's `/v1/models`; authentication follows that service's actual config.
+4. Send one short question first to verify input/output, then increase context gradually. On error, expand this build's `logs/serve.log` or the actual log location shown on the page.
 
-后续可在帮助中心加入一个**专门针对业务模型服务**的「测试一句话」入口：用户显式点击后，通过后端调用当前 ready 服务，展示真实响应。该入口与“助手上游连接测试”是两个不同功能，不能拿外部助手回答冒充本地模型已运行。本方案先完成引导与现有接口接入，若实施这个测试入口，应列为独立明确工作项并复用受管服务限制。
+Later the help center can add a **"test one sentence" entry specifically for the business model service**: after the user explicitly clicks it, the backend calls the current ready service and shows the real response. That entry and the "assistant upstream connection test" are two different features — an external assistant's answer must not pose as the local model running. This plan first completes guidance and existing-interface integration; if that test entry is implemented it should be a separate explicit work item reusing the managed-service limits.
 
-### 5.2 启动决策
+### 5.2 Start decision
 
-| 当前事实 | 用户看到的说明 | 下一步 |
+| Current fact | What the user sees | Next step |
 |---|---|---|
-| 准备/转换/验证中 | 还没完成本次运行验证 | 看阶段日志，等待真实结果 |
-| converted | 有转换产物，但本次未完成 GPU 验证 | 按当前流程开启验证到新输出，或明确使用脚本手动诊断；不提供伪装 validated 的办法 |
-| validation-failed | 产物未通过当前 GPU 验证 | 看 smoke/引擎/资源错误 |
-| quality-rejected | 当前质量要求没有通过 | 看对照/语料/阈值与失败原因，调整后重做，不改结果文件 |
-| validated 且可启动 | 已满足当前启动门禁 | 点启动并等 ready |
-| ready | 服务已接受健康检查 | 配客户端做一次实际文本请求 |
-| exited | 进程退出了 | 查 serve.log，不继续显示“模型可用” |
+| Preparing/converting/validating | This run's validation is not finished | Watch the stage log and wait for the real result |
+| converted | A conversion artifact exists, but this run did not complete GPU validation | Enable validation to a new output per the current flow, or explicitly use the script for manual diagnosis; no way to fake validated is provided |
+| validation-failed | The artifact did not pass current GPU validation | Look at smoke/engine/resource errors |
+| quality-rejected | The current quality requirement did not pass | Look at baseline/corpus/threshold and the failure cause, adjust and redo — do not edit the result file |
+| validated and startable | The current start gate is satisfied | Click start and wait for ready |
+| ready | The service passed the health check | Configure a client and make one real text request |
+| exited | The process exited | Check serve.log; do not keep showing "model available" |
 
-## 6. 回答示例与证据约束
+## 6. Answer examples and evidence constraints
 
-**问题：4-bit 是不是最划算？**
+**Question: Is 4-bit the best deal?**
 
-“它通常能减少权重存储，但是否适合你，要看这个模型的可用配方、空闲显存和质量要求。先用当前自动推荐建立基线；如果显存仍紧张，再比较可选低位宽，并用相同语料和实际任务检查质量。你当前的具体推荐以检查结果为准。”
+"It usually reduces weight storage, but whether it suits you depends on this model's available recipes, free VRAM, and quality requirements. Establish a baseline with the current auto recommendation first; if VRAM is still tight, compare available lower bit widths and check quality with the same corpus and real tasks. Your specific recommendation now follows the inspection result."
 
-**问题：MTP 头已保留，为什么 AWQ 没加速？**
+**Question: The MTP head was kept — why did AWQ not get faster?**
 
-“当前 HF AWQ/GPTQ 服务只归档辅助头，不执行 MTP/DFlash2。若需要实际推测执行，请查看该模型可用的 NInfer 路线；若仅需导出 AWQ，则明确选择关闭推测。保留完整不等于已启用。”依据：`SPECULATIVE_RETENTION.md` 与当前 HF serving 能力。
+"The current HF AWQ/GPTQ service only archives auxiliary heads and does not execute MTP/DFlash2. If you need actual speculative execution, look at the NInfer routes available for this model; if you only need to export AWQ, explicitly choose to turn speculation off. Kept intact does not mean enabled." Basis: `SPECULATIVE_RETENTION.md` and current HF serving capability.
 
-**问题：PPL 比对照高 9.90%，模型废了吗？**
+**Question: PPL is 9.90% above baseline — is the model ruined?**
 
-“单凭这项数字不能断定模型不能用。它表示在本次指定语料和设置下，PPL 相比对照增大了 9.90%；是否通过取决于你设定的阈值和实际任务表现。先确认对照与评分设置一致，再看门禁结果，并用你的任务补测。”没有本次报告时不直接宣称“已通过”。
+"This number alone cannot decide the model is unusable. It means that under this run's specified corpus and settings, PPL increased 9.90% versus the baseline; whether it passes depends on your set threshold and real task performance. First confirm the baseline and scoring settings match, then look at the gate result, and add tests with your own tasks." Without this run's report, never directly claim "passed".
 
-**问题：缺内存，把 bit 改低就行吗？**
+**Question: Out of memory — is lowering bits enough?**
 
-“先确认缺的是系统 RAM 还是 GPU 显存。降低输出 bit 可能减少运行权重，但转换仍可能加载高精度输入、校准激活和中间数据。先查看报错阶段与资源卡，再决定换小模型、释放资源或选择当前已支持的其他路径。”
+"First confirm whether what is short is system RAM or GPU VRAM. Lowering output bits may reduce runtime weights, but conversion may still load full-precision input, calibration activations, and intermediate data. Look at the error stage and resource card first, then decide whether to switch to a smaller model, free resources, or choose another currently supported path."
 
-## 7. 内容维护与验收映射
+## 7. Content maintenance and acceptance mapping
 
-| 来源/覆盖对象 | 对应内容 | 维护规则 |
+| Source / coverage object | Corresponding content | Maintenance rule |
 |---|---|---|
-| `ForgeConfig` 与网页字段 | B–F、参数术语 | 每个可编辑字段有说明、影响、限制、默认来源、出错定位 |
-| `RECIPES / HF_RECIPES / precheck.choices` | C–D、路线表 | 选项来自运行元数据；新增配方同步写知识适用范围 |
-| `Diagnostic.code` | 配套诊断目录 | 自动提取集合与知识 ID 对比；新 code 无条目则 CI 失败 |
-| 构建/服务状态 | G、J、启动决策表 | 新状态同步解释是否终态/是否可启动，保留后端原门禁 |
-| reports 指标 | H–I | 单位、状态、来源、测量条件与不可比较条件齐全 |
-| 运行异常 | 配套运行错误分类、A/B/G/J/K | 记录类别和原始原因；未知错误不强行归类成“已解决” |
-| AI 配置与隐私 | K | 必须与实际存储/会话/部署模式一致，不宣传未实现的保护 |
-| 历史测试报告 | 相关实测条目 | 标注历史、硬件和边界；未重新测不改成“当前全部验证” |
+| `ForgeConfig` and page fields | B–F, parameter terms | Every editable field has explanation, effect, limits, default source, and error location |
+| `RECIPES / HF_RECIPES / precheck.choices` | C–D, route table | Options come from runtime metadata; a new recipe updates the knowledge scope in sync |
+| `Diagnostic.code` | Companion diagnostic catalog | Compare the auto-extracted set with knowledge IDs; a new code without an entry fails CI |
+| Build/service states | G, J, start decision table | A new state explains in sync whether it is terminal/startable, keeping the backend's original gate |
+| reports metrics | H–I | Units, state, source, measurement conditions, and non-comparable conditions are complete |
+| Runtime exceptions | Companion runtime error classification, A/B/G/J/K | Record category and original cause; an unknown error is never forced into "resolved" |
+| AI config and privacy | K | Must match actual storage/session/deployment mode; never advertise unimplemented protection |
+| Historical test reports | Relevant measured entries | Label history, hardware, and boundaries; without re-measurement never change to "all currently verified" |
 
-上线前以 A01–L10 全量问题为人工验收清单，选代表性改写与已知错误作自动检索回归；抽样覆盖不等于已逐项验证答案。实施完成后填写每项知识 ID、来源、复核人/日期与验证状态。当前所有条目状态均为“初稿待接入”，本文没有声称运行过 AI 问答评估。
+Before going live, use the full A01–L10 question set as the manual acceptance checklist, with representative rewrites and known errors as automatic retrieval regression; sampled coverage does not mean every answer was verified item by item. After implementation, fill in each knowledge ID's source, reviewer/date, and verification status. All entries are currently "draft pending integration"; this document does not claim any AI Q&A evaluation was run.

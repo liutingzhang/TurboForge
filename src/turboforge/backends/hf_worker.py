@@ -45,38 +45,38 @@ def check_checkpoint_layout(directory: Path) -> dict:
         summaries, _ = read_tensor_summaries(path)
         for tensor in summaries:
             if tensor.name in tensors:
-                raise ValueError("AWQ/GPTQ 重复张量：" + tensor.name)
+                raise ValueError("Duplicate AWQ/GPTQ tensor: " + tensor.name)
             tensors[tensor.name] = tensor
     from ..speculative import tensors as tensor_locations
     locations = tensor_locations(directory)
     packed = [name[:-len(".qweight")] for name in tensors if name.endswith(".qweight")]
     if not packed:
-        raise ValueError("保存结果没有 qweight，不能认定为原生 AWQ/GPTQ 检查点")
+        raise ValueError("The saved result has no qweight; it cannot be treated as a native AWQ/GPTQ checkpoint")
     for prefix in packed:
         if tensors[prefix+".qweight"].dtype != "I32":
-            raise ValueError("当前仅支持 INT32 打包：" + prefix)
+            raise ValueError("Only INT32 packing is currently supported: " + prefix)
         for suffix in (".scales", ".qzeros"):
             if prefix+suffix not in tensors:
-                raise ValueError("量化权重缺少配套张量：" + prefix+suffix)
+                raise ValueError("The quantized weight is missing its companion tensor: " + prefix+suffix)
         weight, scale, zero = (tensors[prefix+suffix] for suffix in (".qweight",".scales",".qzeros"))
         quant = config["quantization_config"]
         bits = quant.get("bits",quant.get("w_bit"))
         group = quant.get("group_size",quant.get("q_group_size",128))
         if len(weight.shape) != 2 or len(scale.shape) != 2 or len(zero.shape) != 2 or zero.dtype != "I32" or scale.dtype not in ("F16","BF16","F32"):
-            raise ValueError("量化张量类型或维度无效："+prefix)
+            raise ValueError("Invalid quantized tensor type or dimensions: "+prefix)
         groups,n = scale.shape
         k = weight.shape[0] if quant_method(config) == "awq" else weight.shape[0]*32//bits
         expected_weight = [k,n//8] if quant_method(config) == "awq" else [k//32*bits,n]
         if k <= 0 or n <= 0 or k % 32 or n % 32 or groups != (1 if group == -1 else (k+group-1)//group) or weight.shape != expected_weight or zero.shape != [groups,n//32*bits]:
-            raise ValueError("量化 packed/scale/zero 几何不匹配："+prefix)
+            raise ValueError("Quantized packed/scale/zero geometry mismatch: "+prefix)
         index = tensors.get(prefix+".g_idx")
         if quant.get("desc_act") or index is not None:
             if index is None or index.dtype != "I32" or index.shape != [k]:
-                raise ValueError("GPTQ act-order 缺少有效 g_idx："+prefix)
+                raise ValueError("GPTQ act-order lacks a valid g_idx: "+prefix)
         for tensor in (weight, scale, zero, *([index] if index is not None else [])):
             size = 2 if tensor.dtype in ("F16","BF16") else 4
             if locations[tensor.name]["bytes"] != math.prod(tensor.shape)*size:
-                raise ValueError("量化张量声明与实际字节数不符："+tensor.name)
+                raise ValueError("The quantized tensor declaration does not match the actual byte count: "+tensor.name)
         _check_packed_values(locations[prefix+".scales"], scale.dtype, name=prefix+".scales")
         if index is not None:
             _check_packed_values(locations[prefix+".g_idx"], "I32", groups, prefix+".g_idx")
@@ -94,7 +94,7 @@ def _check_packed_values(item: dict, dtype: str, groups: int = 0, name: str = ""
         while remaining:
             data = stream.read(min(remaining,1024*1024))
             if not data:
-                raise ValueError("量化张量数据被截断")
+                raise ValueError("Quantized tensor data is truncated")
             values = array.array(code)
             values.frombytes(data)
             if sys.byteorder != "little": values.byteswap()
@@ -103,8 +103,8 @@ def _check_packed_values(item: dict, dtype: str, groups: int = 0, name: str = ""
             else:
                 invalid = any(value == 0 or value & sign or (value & exponent) == exponent for value in values)
             if invalid:
-                reason = "量化 g_idx 超出分组范围" if dtype == "I32" else "量化 scales 必须为有限正数，不能为零、负数、NaN 或 Inf"
-                raise ValueError(reason+"："+name)
+                reason = "Quantized g_idx is out of the group range" if dtype == "I32" else "Quantized scales must be finite positive numbers, not zero, negative, NaN or Inf"
+                raise ValueError(reason+": "+name)
             remaining -= len(data)
 
 
@@ -119,15 +119,15 @@ def checkpoint_receipt(directory: Path) -> Path:
 def verify_checkpoint(directory: Path) -> None:
     manifest_path = directory.parent/"manifest.json"
     if manifest_path.is_file() and read_json_atomic(manifest_path).get("status") != "validated":
-        raise ValueError("此构建尚未通过全部验证或质量门禁，不能直接启动 HF 检查点")
+        raise ValueError("This build has not passed all validation or the quality gate; the HF checkpoint cannot be started directly")
     receipt = read_json_atomic(directory/"turboforge-checkpoint.json")
     files = receipt.get("files")
     if not isinstance(files,dict) or "config.json" not in files or not any(name.endswith(".safetensors") for name in files):
-        raise ValueError("AWQ/GPTQ 检查点清单不完整")
+        raise ValueError("The AWQ/GPTQ checkpoint manifest is incomplete")
     for name, digest in files.items():
         path = (directory/name).resolve()
         if directory.resolve() not in path.parents or not path.is_file() or file_sha256(path) != digest:
-            raise ValueError("AWQ/GPTQ 文件损坏或被更改：" + name)
+            raise ValueError("AWQ/GPTQ file corrupt or altered: " + name)
     check_checkpoint_layout(directory)
 
 
@@ -151,7 +151,7 @@ def build(config: ForgeConfig, inspection) -> BuildManifest:
     effective_plan = plan(config, inspection)
     if not effective_plan.executable:
         manifest = BuildManifest.create(config.output_dir,config,inspection,effective_plan.to_dict())
-        manifest.transition("blocked","；".join(d.message for d in effective_plan.diagnostics if d.severity.value == "error"))
+        manifest.transition("blocked","; ".join(d.message for d in effective_plan.diagnostics if d.severity.value == "error"))
         return manifest
     if config.target == "hf_packed_import":
         check_checkpoint_layout(Path(config.input_path))
@@ -165,16 +165,16 @@ def build(config: ForgeConfig, inspection) -> BuildManifest:
             result = subprocess.run([str(python),"-m",__name__,"build","--config",str(request)],env=child_environment(_environment()))
         manifest = BuildManifest(Path(config.output_dir))
         if not manifest.path.is_file():
-            raise RuntimeError(f"AWQ/GPTQ 进程退出 {result.returncode}，没有生成构建记录")
+            raise RuntimeError(f"The AWQ/GPTQ process exited with {result.returncode}; no build record was produced")
         manifest.data = read_json_atomic(manifest.path)
         if result.returncode and manifest.data["status"] not in ("failed","blocked","validation-failed","quality-rejected"):
-            manifest.transition("failed",f"AWQ/GPTQ 独立进程退出 {result.returncode}")
+            manifest.transition("failed",f"The AWQ/GPTQ separate process exited with {result.returncode}")
         return manifest
     output = Path(config.output_dir).expanduser().resolve()
     manifest = BuildManifest.create(output,config,inspection,effective_plan.to_dict())
     write_json_atomic(output/"plan.json",effective_plan.to_dict())
     if not effective_plan.executable:
-        manifest.transition("blocked","；".join(d.message for d in effective_plan.diagnostics if d.severity.value == "error"))
+        manifest.transition("blocked","; ".join(d.message for d in effective_plan.diagnostics if d.severity.value == "error"))
         return manifest
     with (output/"logs/convert.log").open("w",encoding="utf-8",buffering=1) as log, redirect_stdout(log), redirect_stderr(log):
         try:
@@ -204,7 +204,7 @@ def calibration_examples(tokenizer, options: dict, output: Path) -> list[dict]:
     ids = tokenizer(text,add_special_tokens=False,verbose=False)["input_ids"]
     identity["text_sha256"] = hashlib.sha256(text.encode()).hexdigest()
     if len(ids) < count*length:
-        raise ValueError(f"校准语料只有 {len(ids)} token，{count} 个不重叠样本至少需要 {count*length}；请增加语料或减少样本")
+        raise ValueError(f"The calibration corpus has only {len(ids)} tokens; {count} non-overlapping samples need at least {count*length}. Add corpus text or reduce the sample count")
     generator = random.Random(0)
     starts = generator.sample(range(0,len(ids)-length+1,length),count)
     write_json_atomic(output/"calibration.json",{**identity,"samples":count,"sequence_length":length,"seed":0,"starts":starts})
@@ -251,7 +251,7 @@ def cpu_reference_kernels(model_type: str):
 def _ppl(model, ids: list[int], context: int, stride: int, device: str) -> tuple[float,int]:
     import torch
     if stride >= context or context < 2 or len(ids) < 2:
-        raise ValueError("PPL 需要至少两个 token，且 stride 必须小于 context")
+        raise ValueError("PPL needs at least two tokens, and stride must be smaller than context")
     loss, scored, previous_end = 0.0,0,0
     with torch.inference_mode():
         for start in range(0,len(ids),stride):
@@ -270,7 +270,7 @@ def _ppl(model, ids: list[int], context: int, stride: int, device: str) -> tuple
                 break
     value = math.exp(loss/scored)
     if not math.isfinite(value):
-        raise ValueError("PPL 不是有限数")
+        raise ValueError("PPL is not a finite number")
     return value,scored
 
 
@@ -289,20 +289,20 @@ def _build(config, inspection, effective_plan, manifest) -> None:
         source = source.parent
     checkpoint = output/"model-hf"
     if not torch.cuda.is_available():
-        raise RuntimeError("AWQ/GPTQ GPU 路线需要可用 CUDA PyTorch")
+        raise RuntimeError("The AWQ/GPTQ GPU route needs a working CUDA PyTorch")
     torch.manual_seed(0)
     if config.jailbreak != "none":
-        manifest.transition("jailbreaking","先编辑高精度权重，再校准量化")
+        manifest.transition("jailbreaking","Edit high-precision weights first, then calibrate and quantize")
         work = output/"intermediate"/config.jailbreak
         work.mkdir(parents=True)
         source = Path(get_processor(config.jailbreak).apply(inspection,work,**config.jailbreak_params))
-        manifest.transition("jailbroken","高精度权重编辑完成")
+        manifest.transition("jailbroken","High-precision weight editing complete")
     tokenizer = AutoTokenizer.from_pretrained(str(source),trust_remote_code=False,local_files_only=True)
     from ..evaluation import evaluation_text, AUTO_EVALUATION_TOKENS
     evaluation_corpus, evaluation_identity = evaluation_text(config.benchmark, output)
     conversion_start = time.monotonic()
     quantization_peak = None
-    manifest.transition("converting","GPTQModel 原生打包；没有二次量化",converter={"engine":"gptqmodel","version":GPTQMODEL_VERSION,"recipe":config.target})
+    manifest.transition("converting","GPTQModel native packing; no second quantization",converter={"engine":"gptqmodel","version":GPTQMODEL_VERSION,"recipe":config.target})
     if config.target == "hf_packed_import":
         checkpoint.mkdir()
         from ..domain import MODEL_RESOURCE_FILES
@@ -324,7 +324,7 @@ def _build(config, inspection, effective_plan, manifest) -> None:
         calibration = calibration_examples(tokenizer,config.quantization,output)
         if evaluation_corpus is not None:
             if read_json_atomic(output/"calibration.json").get("text_sha256") == evaluation_identity["text_sha256"]:
-                raise ValueError("校准与质量评测不能使用相同内容的语料")
+                raise ValueError("Calibration and quality evaluation cannot use corpora with identical content")
         qconfig = QuantizeConfig(method=method,format="gemm" if method == "awq" else "gptq",
                                  bits=int(bits),group_size=config.quantization.get("group_size",128),
                                  sym=method == "gptq",desc_act=method == "gptq",static_groups=False,act_group_aware=False,device="cuda:0",
@@ -351,7 +351,7 @@ def _build(config, inspection, effective_plan, manifest) -> None:
         scratch = output/"offload"
         if scratch.exists():
             if scratch.resolve().parent != output.resolve() or scratch.is_symlink():
-                raise ValueError("卸载缓存路径越出本次输出目录，拒绝清理")
+                raise ValueError("The offload cache path escapes this run's output directory; cleanup refused")
             shutil.rmtree(scratch)
         manifest.add_artifact("calibration",output/"calibration.json",digest=True)
     from ..domain import MODEL_RESOURCE_FILES
@@ -363,36 +363,36 @@ def _build(config, inspection, effective_plan, manifest) -> None:
     manifest.data["speculative_retention"] = retention
     receipt = checkpoint_receipt(checkpoint)
     manifest.add_artifact("hf_checkpoint",receipt,digest=True)
-    manifest.transition("converted","HF 原生检查点已保存",converter={"engine":"gptqmodel","version":GPTQMODEL_VERSION,
+    manifest.transition("converted","HF native checkpoint saved",converter={"engine":"gptqmodel","version":GPTQMODEL_VERSION,
                          "recipe":config.target,"seconds":round(time.monotonic()-conversion_start,2),"checkpoint":"model-hf"})
     backend = config.quantization.get("backend",HF_DEFAULT_BACKEND)
     model = _load(checkpoint,backend)
     device = "cuda:0"
     model.model.eval()
-    manifest.transition("validating","HF GPU 加载与生成")
+    manifest.transition("validating","HF GPU load and generation")
     inputs = tokenizer("Reply with one word: OK",return_tensors="pt").to(device)
     with torch.inference_mode():
         logits = model.model(**inputs,use_cache=False).logits
         if not torch.isfinite(logits).all().item():
-            raise ValueError("量化检查点 GPU logits 含 NaN/Inf，不能交付")
+            raise ValueError("The quantized checkpoint's GPU logits contain NaN/Inf; it cannot be delivered")
         del logits
         generated = model.generate(**inputs,max_new_tokens=16,do_sample=False,return_dict_in_generate=False)
     new_tokens = generated[0,inputs["input_ids"].shape[1]:]
     text = tokenizer.decode(new_tokens,skip_special_tokens=True)
     if not text.strip():
-        raise ValueError("GPU 加载成功但未生成有效文本")
+        raise ValueError("GPU load succeeded but no valid text was generated")
     (output/"logs/smoke.log").write_text(text,encoding="utf-8")
     performance = performance_report({},runtime=effective_plan.serving,environment={"engine":"gptqmodel","backend":backend,"gpu":torch.cuda.get_device_name(0)})
     performance["metrics"]["quantization_peak_vram_bytes"] = {"status":"measured" if quantization_peak is not None else "not_measured",
         "value":quantization_peak,"source":"torch.cuda.max_memory_allocated",
-        "note":"本次校准量化到保存结束的 PyTorch 分配峰值；含加载后驻留权重，不代表整张显卡或其他进程"}
+        "note":"PyTorch allocation peak from this calibration/quantization through save completion; includes resident weights after loading, not the whole GPU or other processes"}
     if config.run_benchmark:
-        manifest.transition("benchmarking","HF 实际生成速度测试")
+        manifest.transition("benchmarking","HF actual generation speed test")
         repetitions = config.benchmark.get("repetitions",3)
         inputs = tokenizer("Explain the advantages of running language models locally in detail.",return_tensors="pt").to(device)
         maximum = min(config.benchmark.get("n_gen",[64])[0],effective_plan.serving["max_context"]-inputs["input_ids"].shape[1])
         if maximum < 1:
-            raise ValueError("服务上下文不足以完成生成测试")
+            raise ValueError("The serving context is too small to complete the generation test")
         rates = []
         with torch.inference_mode():
             warmup = model.generate(**inputs,min_new_tokens=min(4,maximum),max_new_tokens=min(4,maximum),do_sample=False,return_dict_in_generate=False)
@@ -404,14 +404,14 @@ def _build(config, inspection, effective_plan, manifest) -> None:
                 tokens = model.generate(**inputs,min_new_tokens=maximum,max_new_tokens=maximum,do_sample=False,return_dict_in_generate=False)
                 torch.cuda.synchronize()
                 if tokens.shape[-1]-inputs["input_ids"].shape[-1] != maximum:
-                    raise ValueError("速度测试未生成要求的固定 token 数，不能报告为完整测速")
+                    raise ValueError("The speed test did not generate the required fixed token count; it cannot be reported as a complete benchmark")
                 rates.append((tokens.shape[-1]-inputs["input_ids"].shape[-1])/(time.monotonic()-started))
                 del tokens
         performance["metrics"]["decode_tok_s"] = {"status":"measured","value":{"end_to_end_generation":sum(rates)/len(rates)},"source":"GPTQModel.generate",
-            "note":"含短提示预填充的端到端生成吞吐；不是纯解码内核速度，不能直接与 ninfer_bench 对比"}
+            "note":"End-to-end generation throughput including short-prompt prefill; not pure decode-kernel speed and not directly comparable with ninfer_bench"}
         performance["generation_benchmark"] = {"tokens_per_run":maximum,"prompt_tokens":inputs["input_ids"].shape[-1],"repetitions":repetitions,"warmup_new_tokens":min(4,maximum)}
         performance["metrics"]["peak_vram_bytes"] = {"status":"measured","value":torch.cuda.max_memory_allocated(),"source":"torch.cuda.max_memory_allocated",
-            "note":"仅 PyTorch 当前进程分配峰值，包含驻留权重；不代表整张显卡或量化阶段峰值"}
+            "note":"PyTorch current-process allocation peak only, including resident weights; not the whole GPU or the quantization-stage peak"}
     quality = quality_report(jailbreak=config.jailbreak,runtime=effective_plan.serving)
     if evaluation_corpus is not None:
         corpus = evaluation_corpus
@@ -427,14 +427,14 @@ def _build(config, inspection, effective_plan, manifest) -> None:
         if config.target != "hf_packed_import":
             current_source = {item["path"]:(Path(config.input_path)/item["path"]).stat() for item in manifest.data["source_files"]}
             if config.jailbreak == "none" and any(current_source[item["path"]].st_size != item["bytes"] or current_source[item["path"]].st_mtime_ns != item["modified_ns"] for item in manifest.data["source_files"]):
-                raise ValueError("原始权重在量化后发生变更，不能作为同阶段质量对照")
+                raise ValueError("The original weights changed after quantization; they cannot serve as a same-stage quality baseline")
             from transformers import AutoModelForCausalLM,AutoModelForImageTextToText
             loader = AutoModelForImageTextToText if inspection.architecture.endswith("ForConditionalGeneration") else AutoModelForCausalLM
             original = loader.from_pretrained(str(source),dtype=torch.float32,device_map={"":"cpu"},trust_remote_code=False,local_files_only=True).eval()
             with cpu_reference_kernels(inspection.model_type):
                 baseline,baseline_count = _ppl(original,ids,context,stride,"cpu")
             if scored != baseline_count:
-                raise ValueError("对照与量化模型 PPL 的评分 token 不一致")
+                raise ValueError("The baseline and quantized-model PPL scored different tokens")
             del original;gc.collect()
         def result(value):
             return BenchResult("GPTQModel.forward",[],0,0,"","",{"perplexity":value})
@@ -442,7 +442,7 @@ def _build(config, inspection, effective_plan, manifest) -> None:
                                  jailbreak=config.jailbreak,runtime=effective_plan.serving)
         quality["metrics"]["quantization_loss"]["source"] = "GPTQModel.forward / Transformers CPU reference"
         quality["evaluation"] = {**evaluation_identity,"corpus_sha256":hashlib.sha256(corpus.encode()).hexdigest(),"tokens_scored":scored,
-                                  "context":context,"stride":stride,"baseline":"同阶段高精度权重（CPU FP32 计算）" if baseline is not None else None}
+                                  "context":context,"stride":stride,"baseline":"Same-stage high-precision weights (CPU FP32 computation)" if baseline is not None else None}
     else:
         del model,generated,new_tokens,inputs
         _release()
@@ -453,7 +453,7 @@ def _build(config, inspection, effective_plan, manifest) -> None:
             status = "quality-rejected"
     for name,path in write_reports(output/"reports",performance,quality).items():
         manifest.add_artifact("report_"+name,path)
-    manifest.transition(status,"HF GPU 验证与所选评测完成",measurements=measurement_summary(performance,quality))
+    manifest.transition(status,"HF GPU validation and selected evaluations complete",measurements=measurement_summary(performance,quality))
     if status == "validated":
         from .hf_quantization import server_command
         command = server_command(asdict(config),output,effective_plan.serving)
@@ -493,18 +493,18 @@ def create_text_app(loaded,tokenizer,name: str,context: int):
     def completions():
         body = request.get_json(silent=True)
         if not isinstance(body,dict):
-            return jsonify({"error":{"message":"请求必须为 JSON 对象","type":"invalid_request_error"}}),400
+            return jsonify({"error":{"message":"The request must be a JSON object","type":"invalid_request_error"}}),400
         if type(body.get("stream",False)) is not bool:
-            return jsonify({"error":{"message":"stream 必须为布尔值","type":"invalid_request_error"}}),400
+            return jsonify({"error":{"message":"stream must be a boolean","type":"invalid_request_error"}}),400
         if body.get("tools") or body.get("tool_choice") or body.get("response_format") or body.get("stop") or body.get("n",1) != 1:
-            return jsonify({"error":{"message":"HF 本地服务当前支持单条文本对话，不支持工具、结构化输出或 stop 参数","type":"invalid_request_error"}}),400
+            return jsonify({"error":{"message":"The HF local service currently supports a single text conversation; tools, structured output and the stop parameter are not supported","type":"invalid_request_error"}}),400
         messages = body.get("messages")
         if not isinstance(messages,list) or not messages or any(not isinstance(m,dict) or m.get("role") not in ("system","user","assistant") or not isinstance(m.get("content"),str) for m in messages):
-            return jsonify({"error":{"message":"messages 仅支持 system/user/assistant 文本消息","type":"invalid_request_error"}}),400
+            return jsonify({"error":{"message":"messages supports only system/user/assistant text messages","type":"invalid_request_error"}}),400
         maximum = body.get("max_tokens",128)
         temperature = body.get("temperature",0)
         if type(maximum) is not int or maximum < 1 or type(temperature) not in (int,float) or not math.isfinite(temperature) or temperature < 0:
-            return jsonify({"error":{"message":"max_tokens 或 temperature 无效","type":"invalid_request_error"}}),400
+            return jsonify({"error":{"message":"Invalid max_tokens or temperature","type":"invalid_request_error"}}),400
         if tokenizer.chat_template:
             prompt = tokenizer.apply_chat_template(messages,tokenize=False,add_generation_prompt=True)
         else:
@@ -512,12 +512,12 @@ def create_text_app(loaded,tokenizer,name: str,context: int):
         inputs = tokenizer(prompt,return_tensors="pt",add_special_tokens=False)
         count = inputs["input_ids"].shape[-1]
         if count+maximum > context:
-            return jsonify({"error":{"message":f"输入与输出总长度超过 {context} token","type":"invalid_request_error"}}),400
+            return jsonify({"error":{"message":f"The combined input and output length exceeds {context} tokens","type":"invalid_request_error"}}),400
         kwargs = {"max_new_tokens":maximum,"do_sample":temperature > 0,"return_dict_in_generate":False}
         if temperature > 0:
             kwargs["temperature"] = temperature
         if not lock.acquire(blocking=False):
-            return jsonify({"error":{"message":"模型正在处理另一个请求","type":"rate_limit_error"}}),429
+            return jsonify({"error":{"message":"The model is processing another request","type":"rate_limit_error"}}),429
         released = False
         release_guard = threading.Lock()
         def release():
@@ -569,7 +569,7 @@ def create_text_app(loaded,tokenizer,name: str,context: int):
                     yield "data: [DONE]\n\n"
                 except Exception as exc:
                     app.logger.exception("HF streaming response failed")
-                    yield "data: "+json.dumps({"error":{"message":str(exc) or "生成超时","type":"server_error"}})+"\n\n"
+                    yield "data: "+json.dumps({"error":{"message":str(exc) or "Generation timed out","type":"server_error"}})+"\n\n"
                     yield "data: [DONE]\n\n"
                 finally:
                     cancelled.set()

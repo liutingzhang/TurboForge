@@ -23,22 +23,22 @@ def main() -> int:
     from turboforge.bootstrap import cache_root, ensure_node
     from turboforge.deployment import check
     from turboforge.assistant.config import child_environment
-    print("[1/3] 检查部署环境…", flush=True)
+    print("[1/3] Checking the deployment environment...", flush=True)
     diagnostics = check(root)
     report = cache_root() / "deployment.json"
     report.write_text(json.dumps(diagnostics, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("自检报告：" + str(report), flush=True)
+    print("Self-check report: " + str(report), flush=True)
     for error in diagnostics["errors"]:
-        print("需要处理：" + error, flush=True)
+        print("Action needed: " + error, flush=True)
     if "--check" in sys.argv[1:]:
         print(json.dumps(diagnostics, ensure_ascii=False, indent=2), flush=True)
         return 0 if diagnostics["ready"] else 1
     if "--prepare-hf" in sys.argv[1:]:
         from turboforge.backends.hf_quantization import ensure_environment
-        print("自动准备 HF 环境，不转换模型、不重新测速。",flush=True)
-        print("HF Python："+str(ensure_environment()),flush=True)
+        print("Preparing the HF environment automatically; no model conversion and no re-benchmarking.",flush=True)
+        print("HF Python: "+str(ensure_environment()),flush=True)
         return 0
-    print("[2/3] 自动准备页面与依赖，首次下载请保持窗口开启…", flush=True)
+    print("[2/3] Preparing pages and dependencies automatically; keep this window open during the first download...", flush=True)
     requirements = root / "requirements-web.txt"
     expected = [line.split("==", 1) for line in requirements.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#")]
     try:
@@ -62,9 +62,9 @@ def main() -> int:
         except OSError:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-    print("[3/3] 启动本机页面…", flush=True)
+    print("[3/3] Starting the local page...", flush=True)
     url = f"http://127.0.0.1:{port}"
-    print(f"TurboForge: {url}\n请保留此窗口，关闭窗口将中断构建。", flush=True)
+    print(f"TurboForge: {url}\nKeep this window open; closing it interrupts the build.", flush=True)
     target_url = url + ("?model=" + urllib.parse.quote(sys.argv[1]) if len(sys.argv) > 1 else "")
     def open_when_ready():
         for _ in range(100):
@@ -84,5 +84,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (RuntimeError, OSError, subprocess.CalledProcessError) as exc:
-        print(f"启动失败：{exc}", file=sys.stderr)
+        print(f"Startup failed: {exc}", file=sys.stderr)
         raise SystemExit(1)

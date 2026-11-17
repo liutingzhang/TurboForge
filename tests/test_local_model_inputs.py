@@ -72,7 +72,7 @@ def test_hf_input_with_extra_original_is_rejected_during_check(tmp_path):
     with patch("turboforge.precheck.cuda_package"):
         result = precheck(str(model), str(model))
     assert not result["ready"]
-    assert "清空" in result["message"]
+    assert "clear 'Original model source'" in result["message"]
 
 
 def test_remote_gguf_and_local_source_have_same_validation(tmp_path):

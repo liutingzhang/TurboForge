@@ -82,7 +82,7 @@ def test_hf_rejects_head_precision_change_instead_of_silently_accepting(tmp_path
     source=tmp_path/"source";target=tmp_path/"output";base(source);base(target)
     write_safetensors(source/"head.safetensors",{"mtp.fc.weight":("BF16",[32,64])})
     write_safetensors(target/"head.safetensors",{"mtp.fc.weight":("F16",[32,64])})
-    with pytest.raises(ValueError,match="改动"):
+    with pytest.raises(ValueError,match="modified a speculative head"):
         preserve_hf(source,target)
 
 
@@ -124,7 +124,7 @@ def test_artifact_audit_requires_real_component_and_shared_head(tmp_path,compone
     path=tmp_path/"model.ninfer";directory=artifact(path,component)
     assert verify_ninfer(path,[component])[component]["shared_output_connected"]
     directory["uses"]=[];save_artifact(path,directory)
-    with pytest.raises(ValueError,match="输出投影"):
+    with pytest.raises(ValueError,match="shared output projection"):
         verify_ninfer(path,[component])
 
 
@@ -154,7 +154,7 @@ def test_hf_cannot_silently_disable_builtin_head(tmp_path):
     config=ForgeConfig(str(tmp_path),str(tmp_path.parent/(tmp_path.name+"-output")),target="hf_gptq_4")
     result=plan(config,inspection)
     assert not result.executable
-    assert any("不能自动降级" in item.message for item in result.diagnostics)
+    assert any("No automatic downgrade" in item.message for item in result.diagnostics)
     config.runtime={"speculative":"none"}
     assert plan(config,inspection).executable
 
@@ -206,10 +206,10 @@ def test_ggml_codec_rejects_nonfinite_and_overflow_without_rejecting_signed_scal
     rows=np.linspace(-16,15,32,dtype=np.float32).reshape(1,32)
     assert np.isfinite(dequantize(checked_quantize(rows,qtype),qtype)).all()
     rows[0,0]=np.nan
-    with pytest.raises(ValueError,match="输入"):
+    with pytest.raises(ValueError,match="input contains NaN/Inf"):
         checked_quantize(rows,qtype)
     if type_name != "MXFP4":
-        with pytest.raises(ValueError,match="溢出"):
+        with pytest.raises(ValueError,match="overflowed weights"):
             checked_quantize(np.full((1,32),1e30,dtype=np.float32),qtype)
 
 

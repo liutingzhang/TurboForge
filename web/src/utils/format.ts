@@ -14,7 +14,7 @@ export function bitsLabel(bits: number | null | undefined): string {
 }
 
 export function bpwLabel(bpw: number | null | undefined): string {
-  return bpw === null || bpw === undefined ? '由源决定' : `~${bpw} bpw`;
+  return bpw === null || bpw === undefined ? 'Source-defined' : `~${bpw} bpw`;
 }
 
 export function formatTime(iso: string | undefined): string {

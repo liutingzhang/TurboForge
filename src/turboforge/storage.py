@@ -16,7 +16,7 @@ def _size(directory: Path) -> int:
     for item in directory.rglob("*"):
         info = item.lstat()
         if item.is_symlink() or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
-            raise ValueError("构建目录包含链接，不提供自动删除")
+            raise ValueError("The build directory contains links; automatic deletion is not offered")
         if item.is_file():
             total += info.st_size
     return total
@@ -40,19 +40,19 @@ def inventory(root: Path) -> dict:
                 continue
             items.append({"id": folder.name, "status": status, "bytes": size, "removable": status in FAILED})
     return {"items": items, "free_bytes": shutil.disk_usage(root).free,
-            "note": "仅列出本项目管理的构建。只允许清理失败产物；成功模型、原始模型、依赖环境与下载缓存均保留。"}
+            "note": "Only builds managed by this project are listed. Only failed artifacts may be cleaned; successful models, original models, dependency environments and download caches are all kept."}
 
 
 def remove_failed(root: Path, identifiers: list[str]) -> dict:
     if not identifiers or len(identifiers) > 100 or any(not isinstance(value, str) or not re.fullmatch(r"[\w.-]{1,180}", value) or value.startswith(".") for value in identifiers):
-        raise ValueError("请选择有效的失败构建")
+        raise ValueError("Select valid failed builds")
     allowed = {item["id"] for item in inventory(root)["items"] if item["removable"]}
     if not set(identifiers) <= allowed:
-        raise ValueError("所选项目已变化或不是可清理的失败产物，请重新扫描")
+        raise ValueError("The selected items changed or are not cleanable failed artifacts; rescan")
     builds = (root / "builds").resolve()
     targets = [(builds / name).resolve() for name in set(identifiers)]
     if any(target.parent != builds for target in targets):
-        raise ValueError("清理路径不在构建目录内")
+        raise ValueError("The cleanup path is not inside the build directory")
     # Recheck links immediately before deleting, using the same shell/runtime.
     for target in targets:
         _size(target)

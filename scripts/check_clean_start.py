@@ -23,9 +23,9 @@ from turboforge.assistant.config import child_environment
 def check(project: Path) -> dict:
     project = project.resolve()
     if os.name != "nt" or not (project/"scripts/start_web.ps1").is_file():
-        raise RuntimeError("需要已解压的 Windows 发布项目")
+        raise RuntimeError("An extracted Windows release project is required")
     if (project/".env").exists() or (project/".turboforge/venv-py31318").exists():
-        raise RuntimeError("测试目录必须没有个人配置与既有 Web 环境")
+        raise RuntimeError("The test directory must contain no personal configuration or existing web environment")
     environment = {key:value for key,value in os.environ.items()
                    if not key.upper().startswith(("PYTHON", "TURBOFORGE_", "VIRTUAL_ENV", "NODE_"))}
     system = Path(os.environ["SystemRoot"])/"System32"
@@ -33,7 +33,7 @@ def check(project: Path) -> dict:
     environment["TURBOFORGE_NO_BROWSER"] = "1"
     missing = {name:shutil.which(name,path=environment["PATH"]) is None for name in ("python", "node", "npm", "git")}
     if not all(missing.values()):
-        raise RuntimeError("精简 PATH 中意外存在开发工具")
+        raise RuntimeError("Development tools unexpectedly present in the stripped PATH")
     log = project.parent/"clean-start.log"
     report = {"developer_tools_absent":missing,"independent_clean_os":False,
               "note":"Fresh isolated Web environment on the existing Windows/driver; no GPU conversion rerun."}
@@ -45,7 +45,7 @@ def check(project: Path) -> dict:
             deadline = time.monotonic()+240
             while time.monotonic() < deadline:
                 if process.poll() is not None:
-                    raise RuntimeError(f"启动器退出 {process.returncode}，检查 {log}")
+                    raise RuntimeError(f"Launcher exited with {process.returncode}; check {log}")
                 text=log.read_text(encoding="utf-8",errors="replace")
                 match=re.search(r"TurboForge: (http://127\.0\.0\.1:\d+)",text)
                 if match:
@@ -53,14 +53,14 @@ def check(project: Path) -> dict:
                     try:
                         with urllib.request.urlopen(url,timeout=2) as response:
                             report["page_status"]=response.status
-                        with urllib.request.urlopen(url+"/api/assistant/help?q="+urllib.parse.quote("量化后MTP还能用吗"),timeout=2) as response:
+                        with urllib.request.urlopen(url+"/api/assistant/help?q="+urllib.parse.quote("Can I still use MTP after quantization"),timeout=2) as response:
                             report["help_first"]=json.load(response)["entries"][0]["id"]
                         break
                     except OSError:
                         pass
                 time.sleep(.5)
             else:
-                raise RuntimeError(f"首次启动超过 240 秒，检查 {log}")
+                raise RuntimeError(f"First start exceeded 240 seconds; check {log}")
             python=project/".turboforge/venv-py31318/Scripts/python.exe"
             result=subprocess.run([str(python),"-c","import sys,site,importlib.util,json; print(json.dumps({'isolated':sys.prefix!=sys.base_prefix and not site.ENABLE_USER_SITE,'torch_absent':importlib.util.find_spec('torch') is None}))"],
                                   capture_output=True,text=True,check=True,env=child_environment(environment))
@@ -71,7 +71,7 @@ def check(project: Path) -> dict:
             report["python_runtime_prepared"]=report["python_runtime_version"] == "3.13.18"
             report["node_installed"]=(project/".turboforge/node").exists()
             if report["page_status"] != 200 or report["help_first"] != "F03" or not report["isolated"] or not report["torch_absent"] or report["node_installed"]:
-                raise RuntimeError("首次启动检查未满足预期："+json.dumps(report))
+                raise RuntimeError("First-start check did not meet expectations: "+json.dumps(report))
             return report
         finally:
             if process.poll() is None:

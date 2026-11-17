@@ -149,7 +149,7 @@ class ModelSourceTest(unittest.TestCase):
             destination.write_text('{"architectures":["NotSupported"]}')
             return destination
         with patch.object(self.resolver, 'info', return_value=info), patch('turboforge.model_sources.download', side_effect=fetch) as fetcher:
-            with self.assertRaisesRegex(ValueError, '架构'):
+            with self.assertRaisesRegex(ValueError, 'architecture is not yet supported'):
                 self.resolver.snapshot('Org/Model')
         self.assertEqual(fetcher.call_count, 1)
 
@@ -169,7 +169,7 @@ class ModelSourceTest(unittest.TestCase):
 
     def test_ambiguous_origin_is_refused_instead_of_guessing(self):
         (self.root / 'config.json').write_text('{"_name_or_path":"Org/A", "base_model_name_or_path":"Org/B"}')
-        with self.assertRaisesRegex(ValueError, '多个'):
+        with self.assertRaisesRegex(ValueError, 'multiple different original sources'):
             self.resolver.origin(self.root)
 
     def test_tokenizer_config_alone_gets_hydrated_without_changing_source(self):
@@ -195,7 +195,7 @@ class ModelSourceTest(unittest.TestCase):
     def test_missing_model_fails_before_dependency_install(self):
         from turboforge.preparation import prepare
         with patch('turboforge.preparation.cache_root', return_value=self.root), patch('turboforge.preparation.ensure_dependencies') as install:
-            with self.assertRaisesRegex(ValueError, '找不到模型'):
+            with self.assertRaisesRegex(ValueError, 'Model not found'):
                 prepare(str(self.root / 'missing'), {}, lambda _: None)
         install.assert_not_called()
 

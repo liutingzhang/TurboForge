@@ -37,8 +37,8 @@ let handshake: Promise<AssistantConfig> | null = null;
 async function parseResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
   if (!response.ok) {
-    const message = typeof data.error === 'string' ? data.error : `助手请求失败（${response.status}）`;
-    throw new Error(message === '问答包含未知字段' ? '页面与本机服务版本不一致，请重新启动 TurboForge 后刷新页面。' : message);
+    const message = typeof data.error === 'string' ? data.error : `Assistant request failed (${response.status})`;
+    throw new Error(message === 'The assistant request contains unknown fields' ? 'The page and local service versions differ; restart TurboForge and refresh the page.' : message);
   }
   return data as T;
 }
@@ -90,7 +90,7 @@ export async function chat(input: ChatInput, signal: AbortSignal, callbacks: {
     const result = await parseResponse<ChatMeta & ChatDone & {text: string}>(response);
     callbacks.meta(result); callbacks.delta(result.text); callbacks.done(result); return;
   }
-  if (!response.body) throw new Error('浏览器没有提供响应流');
+  if (!response.body) throw new Error('The browser did not provide a response stream');
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8', {fatal: true});
   let buffer = ''; let finished = false;
@@ -103,13 +103,13 @@ export async function chat(input: ChatInput, signal: AbortSignal, callbacks: {
     if (event === 'meta') callbacks.meta(data as ChatMeta);
     else if (event === 'delta' && typeof data.text === 'string') callbacks.delta(data.text);
     else if (event === 'done') { callbacks.done(data as ChatDone); finished = true; }
-    else if (event === 'error') throw new Error(typeof data.error === 'string' ? data.error : '回答未完成');
+    else if (event === 'error') throw new Error(typeof data.error === 'string' ? data.error : 'The answer did not complete');
   };
   try {
     while (true) {
       const part = await reader.read();
       buffer += decoder.decode(part.value, {stream: !part.done});
-      if (buffer.length > 2 * 1024 * 1024) throw new Error('助手事件超过大小限制');
+      if (buffer.length > 2 * 1024 * 1024) throw new Error('Assistant events exceeded the size limit');
       let match: RegExpExecArray | null;
       while ((match = /\r?\n\r?\n/.exec(buffer))) {
         frame(buffer.slice(0, match.index));
@@ -117,7 +117,7 @@ export async function chat(input: ChatInput, signal: AbortSignal, callbacks: {
       }
       if (part.done) break;
     }
-    if (!finished || buffer.trim()) throw new Error('回答流意外结束，请手动重试');
+    if (!finished || buffer.trim()) throw new Error('The answer stream ended unexpectedly; retry manually');
   } finally {
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();

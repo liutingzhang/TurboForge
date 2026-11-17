@@ -11,5 +11,5 @@ await build({root:root+'web',configFile:false,plugins:[react()],
   define:{'process.env.NODE_ENV':'"production"'},
   build:{outDir:output,emptyOutDir:false,minify:true,cssCodeSplit:false,
     lib:{entry:root+'tests/browser/assistant-fixture.tsx',formats:['es'],fileName:()=> 'fixture.js',cssFileName:'fixture'}}});
-await writeFile(output+'index.html','<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>助手 DOM 验收</title><link rel="stylesheet" href="/__assistant_fixture/fixture.css"><div id="root"></div><script type="module" src="/__assistant_fixture/fixture.js"></script></html>');
+await writeFile(output+'index.html','<!doctype html><html lang="en"><meta charset="utf-8"><title>Assistant DOM acceptance</title><link rel="stylesheet" href="/__assistant_fixture/fixture.css"><div id="root"></div><script type="module" src="/__assistant_fixture/fixture.js"></script></html>');
 console.log('Assistant browser fixture built; contains synthetic data only.');

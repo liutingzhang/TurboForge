@@ -19,7 +19,7 @@ _DNS_SLOTS = BoundedSemaphore(4)
 
 def resolve_addresses(host: str, port: int, control: RequestControl | None = None):
     if not _DNS_SLOTS.acquire(blocking=False):
-        raise AssistantError("dns_busy", "域名解析繁忙，请稍后重试", 429)
+        raise AssistantError("dns_busy", "DNS resolution is busy; try again shortly", 429)
     result = []
     finished = Event()
 
@@ -38,9 +38,9 @@ def resolve_addresses(host: str, port: int, control: RequestControl | None = Non
         if control:
             control.check()
         if time.monotonic() >= deadline:
-            raise AssistantError("dns_timeout", "模型域名解析超时，请检查 DNS 与网络", 504)
+            raise AssistantError("dns_timeout", "Model hostname resolution timed out; check DNS and the network", 504)
     if not result[0]:
-        raise AssistantError("network", "无法解析模型服务域名，请检查地址与网络", 502)
+        raise AssistantError("network", "Cannot resolve the model service hostname; check the address and network", 502)
     return result[0]
 
 
@@ -49,7 +49,7 @@ def origin(value: str) -> str:
     try:
         port = url.port or (443 if url.scheme == "https" else 80)
     except ValueError:
-        raise AssistantError("base_url", "Base URL 端口无效") from None
+        raise AssistantError("base_url", "Invalid Base URL port") from None
     host = (url.hostname or "").lower()
     return f"{url.scheme.lower()}://{'[' + host + ']' if ':' in host else host}:{port}"
 
@@ -71,21 +71,21 @@ def target_for(config: ConnectionConfig, allowed_local: tuple[str, ...], control
     try:
         addresses = resolve_addresses(url.hostname or "", port, control)
     except OSError:
-        raise AssistantError("network", "无法解析模型服务域名，请检查地址与网络", 502) from None
+        raise AssistantError("network", "Cannot resolve the model service hostname; check the address and network", 502) from None
     ips = sorted({address[4][0] for address in addresses})
     if not ips:
-        raise AssistantError("network", "模型服务没有可连接地址", 502)
+        raise AssistantError("network", "The model service has no connectable address", 502)
     for address in ips:
         ip = ipaddress.ip_address(address)
         ip = ip.ipv4_mapped if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped else ip
         if not ip.is_global and not (local_allowed and ip.is_loopback):
-            raise AssistantError("unsafe_url", "此服务解析到私网、本机或保留地址；本机模型需管理员允许精确 origin", 403)
+            raise AssistantError("unsafe_url", "This service resolves to a private, loopback, or reserved address; local models require the administrator to allow the exact origin", 403)
         if local_allowed and not ip.is_loopback:
-            raise AssistantError("unsafe_url", "本机例外只能解析到 loopback，不能用于远端或其他内网地址", 403)
+            raise AssistantError("unsafe_url", "The local exception may only resolve to loopback; it cannot be used for remote or other intranet addresses", 403)
     if url.scheme != "https" and not local_allowed:
-        raise AssistantError("unsafe_url", "远端模型服务必须使用 HTTPS", 403)
+        raise AssistantError("unsafe_url", "Remote model services must use HTTPS", 403)
     if config.auth_mode == "none" and not local_allowed:
-        raise AssistantError("unsafe_url", "无需 Key 模式仅允许管理员指定的本机服务", 403)
+        raise AssistantError("unsafe_url", "Keyless mode is only allowed for administrator-specified local services", 403)
     return Target(url.hostname or "", port, ips[0], url.scheme == "https", url.path.rstrip("/") + "/chat/completions")
 
 
@@ -136,9 +136,9 @@ class RequestControl:
 
     def check(self):
         if self.cancelled.is_set():
-            raise AssistantError("cancelled", "已停止读取回答；上游仍可能计费", 409)
+            raise AssistantError("cancelled", "Stopped reading the answer; the upstream may still bill", 409)
         if self.expired.is_set() or (self.deadline is not None and time.monotonic() >= self.deadline):
-            raise AssistantError("timeout", "模型服务超过总时限，请缩短问题或检查服务", 504)
+            raise AssistantError("timeout", "The model service exceeded the total time limit; shorten the question or check the service", 504)
 
     def close(self):
         if self.timer:
@@ -158,16 +158,16 @@ def sse_data(response: http.client.HTTPResponse):
         raw = response.readline(65537)
         if not raw:
             if data:
-                raise AssistantError("upstream_protocol", "模型流在事件结束前断开", 502)
+                raise AssistantError("upstream_protocol", "The model stream disconnected before the event finished", 502)
             return
         total += len(raw)
         size += len(raw)
         if len(raw) > 65536 or size > 65536 or total > 2 * 1024 * 1024:
-            raise AssistantError("upstream_protocol", "模型流响应超过大小限制", 502)
+            raise AssistantError("upstream_protocol", "The model stream response exceeded the size limit", 502)
         try:
             line = raw.decode("utf-8").rstrip("\r\n")
         except UnicodeDecodeError:
-            raise AssistantError("upstream_protocol", "模型流不是有效 UTF-8", 502) from None
+            raise AssistantError("upstream_protocol", "The model stream is not valid UTF-8", 502) from None
         if not line:
             if data:
                 yield "\n".join(data)
@@ -203,16 +203,16 @@ class ChatClient:
             response = connection.getresponse()
             control.check()
             if response.status != 200:
-                public = {401: "模型服务鉴权失败，请检查 API Key", 403: "模型服务拒绝访问，请检查权限",
-                    404: "模型服务路径或模型不存在，请检查根地址与模型 ID", 413: "模型服务认为上下文过大，请缩小选区或新建对话",
-                    429: "模型服务限流或额度不足，请检查服务账户与并发"}
-                message = public.get(response.status, "模型服务返回异常状态，请检查服务状态")
+                public = {401: "Model service authentication failed; check the API Key", 403: "The model service denied access; check permissions",
+                    404: "The model service path or model does not exist; check the base URL and model ID", 413: "The model service considers the context too large; shrink the selection or start a new conversation",
+                    429: "The model service is rate-limited or out of quota; check the service account and concurrency"}
+                message = public.get(response.status, "The model service returned an abnormal status; check the service")
                 if 300 <= response.status < 400:
-                    message = "模型服务返回重定向，已阻止转发凭据；请填写最终 HTTPS 根地址"
+                    message = "The model service returned a redirect; forwarding credentials was blocked. Enter the final HTTPS base URL"
                 raise AssistantError("upstream_" + str(response.status), message, response.status if response.status in (401, 403, 404, 413, 429) else 502)
             if config.stream:
                 if "text/event-stream" not in response.getheader("Content-Type", "").lower():
-                    raise AssistantError("upstream_protocol", "服务未返回 SSE，请检查流式能力或在设置中明确选择非流式", 502)
+                    raise AssistantError("upstream_protocol", "The service did not return SSE; check streaming support or explicitly choose non-streaming in settings", 502)
                 finished = False
                 received_text = False
                 finish_reason = None
@@ -224,20 +224,20 @@ class ChatClient:
                         break
                     event = self._json(data)
                     if event.get("error"):
-                        raise AssistantError("upstream_stream", "模型服务在生成中返回错误；回答未完成", 502)
+                        raise AssistantError("upstream_stream", "The model service returned an error during generation; the answer did not complete", 502)
                     choices = event.get("choices")
                     if not isinstance(choices, list):
-                        raise AssistantError("upstream_protocol", "模型 SSE 缺少 choices", 502)
+                        raise AssistantError("upstream_protocol", "Model SSE is missing choices", 502)
                     if event.get("usage") is not None:
                         usage = self._usage(event["usage"])
                     if not choices:
                         continue
                     choice = choices[0]
                     if not isinstance(choice, dict) or not isinstance(choice.get("delta"), dict):
-                        raise AssistantError("upstream_protocol", "模型 SSE 文本增量格式无效", 502)
+                        raise AssistantError("upstream_protocol", "Invalid model SSE text-delta format", 502)
                     content = choice["delta"].get("content")
                     if content is not None and not isinstance(content, str):
-                        raise AssistantError("upstream_protocol", "模型 SSE 只支持文本回答", 502)
+                        raise AssistantError("upstream_protocol", "Model SSE only supports text answers", 502)
                     if content:
                         received_text = True
                         yield "delta", {"text": content}
@@ -245,42 +245,42 @@ class ChatClient:
                         finish_reason = str(choice["finish_reason"])[:80]
                 control.check()
                 if not finished:
-                    raise AssistantError("upstream_eof", "模型流意外结束，回答未完成，请手动重试", 502)
+                    raise AssistantError("upstream_eof", "The model stream ended unexpectedly and the answer is incomplete; retry manually", 502)
                 if not received_text:
                     if finish_reason == "length":
-                        raise AssistantError("output_budget", "模型输出预算已用尽且没有正文，请提高输出上限或显式选择其他模型", 502)
-                    raise AssistantError("empty_answer", "模型流结束但没有正文，请检查模型能力与输出预算", 502)
+                        raise AssistantError("output_budget", "The model output budget was exhausted with no body; raise the output limit or explicitly choose another model", 502)
+                    raise AssistantError("empty_answer", "The model stream ended with no body; check model capability and the output budget", 502)
                 control.check()
                 yield "done", {"finish_reason": finish_reason or "stop", "usage": usage}
             else:
                 raw = response.read(2 * 1024 * 1024 + 1)
                 control.check()
                 if len(raw) > 2 * 1024 * 1024:
-                    raise AssistantError("upstream_protocol", "模型响应超过大小限制", 502)
+                    raise AssistantError("upstream_protocol", "The model response exceeded the size limit", 502)
                 event = self._json(raw)
                 try:
                     text = event["choices"][0]["message"]["content"]
                     if not isinstance(text, str) or not text:
                         if event["choices"][0].get("finish_reason") == "length":
-                            raise AssistantError("output_budget", "模型输出预算已用尽且没有正文，请提高输出上限或显式选择其他模型", 502)
+                            raise AssistantError("output_budget", "The model output budget was exhausted with no body; raise the output limit or explicitly choose another model", 502)
                         raise ValueError
                     reason = event["choices"][0].get("finish_reason", "stop")
                 except (KeyError, IndexError, TypeError, ValueError):
-                    raise AssistantError("upstream_protocol", "模型未返回有效文本回答", 502) from None
+                    raise AssistantError("upstream_protocol", "The model did not return a valid text answer", 502) from None
                 yield "delta", {"text": text}
                 yield "done", {"finish_reason": str(reason)[:80], "usage": self._usage(event.get("usage"))}
             control.check()
             if time.monotonic() - started > config.timeout_seconds:
-                raise AssistantError("timeout", "模型服务超过总时限", 504)
+                raise AssistantError("timeout", "The model service exceeded the total time limit", 504)
         except AssistantError:
             control.check()
             raise
         except TimeoutError:
             control.check()
-            raise AssistantError("response_timeout", "连接或等待模型响应超时，请检查服务，未自动重试", 504) from None
+            raise AssistantError("response_timeout", "Connecting or waiting for the model response timed out; check the service. No automatic retry", 504) from None
         except (OSError, http.client.HTTPException, ValueError):
             control.check()
-            raise AssistantError("network", "模型连接、证书或响应读取失败，请检查服务；未自动重试", 502) from None
+            raise AssistantError("network", "Model connection, certificate, or response reading failed; check the service. No automatic retry", 502) from None
         finally:
             if response:
                 response.close()
@@ -291,9 +291,9 @@ class ChatClient:
         try:
             result = json.loads(value)
         except (ValueError, UnicodeDecodeError):
-            raise AssistantError("upstream_protocol", "模型服务返回无效 JSON", 502) from None
+            raise AssistantError("upstream_protocol", "The model service returned invalid JSON", 502) from None
         if not isinstance(result, dict):
-            raise AssistantError("upstream_protocol", "模型响应必须是 JSON 对象", 502)
+            raise AssistantError("upstream_protocol", "The model response must be a JSON object", 502)
         return result
 
     @staticmethod

@@ -87,7 +87,7 @@ class ForgePlanner:
         if hf_quantization.quant_method(inspection.config) in ("awq", "gptq"):
             return ForgePlan(config, inspection, [], [Diagnostic(
                 "packed-needs-hf",
-                "已有 AWQ/GPTQ 请选择 HF 原生保留路线，不能直接交给 NInfer。",
+                "Existing AWQ/GPTQ must use the HF native retention route; it cannot be handed directly to NInfer.",
                 Severity.ERROR,
             )])
 
@@ -133,9 +133,9 @@ class ForgePlanner:
         output = Path(config.output_dir).expanduser().resolve()
         source = Path(inspection.path).resolve()
         if output == source or source in output.parents or (source.is_file() and output == source.parent):
-            found.append(Diagnostic("output-overlaps-input", "输出目录必须与原模型分开，且不能放在原模型目录内。", Severity.ERROR))
+            found.append(Diagnostic("output-overlaps-input", "The output directory must be separate from the original model and cannot live inside the original model directory.", Severity.ERROR))
         elif output.exists() and (not output.is_dir() or any(output.iterdir())):
-            found.append(Diagnostic("output-not-empty", "输出目录已存在且非空。请填写一个新的目录名，避免覆盖之前的产物。", Severity.ERROR))
+            found.append(Diagnostic("output-not-empty", "The output directory already exists and is not empty. Enter a new directory name to avoid overwriting previous artifacts.", Severity.ERROR))
         if config.ninfer_dir:
             required = ["ninfer-serve.exe"]
             if config.run_validation:
@@ -144,11 +144,11 @@ class ForgePlanner:
                 required.append("ninfer_bench.exe")
             missing = [name for name in required if not (Path(config.ninfer_dir) / name).is_file()]
             if missing:
-                found.append(Diagnostic("engine-missing", "引擎目录缺少：" + "、".join(missing), Severity.ERROR,
-                                        ("在第一步选择包含 NInfer 可执行文件与 DLL 的目录。",)))
+                found.append(Diagnostic("engine-missing", "The engine directory is missing: " + ", ".join(missing), Severity.ERROR,
+                                        ("In step 1, select the directory containing the NInfer executables and DLLs.",)))
         if config.device == "cuda" and self.upstream.cuda_available is False:
-            found.append(Diagnostic("torch-cuda-unavailable", "当前 Python 的 torch 无法使用 CUDA，不能在 GPU 上转换。", Severity.ERROR,
-                                    ("在第二步选择 CPU 转换；生成的模型仍使用 NVIDIA GPU 推理。", "或为当前 Python 安装匹配驱动的 CUDA 版 torch。")))
+            found.append(Diagnostic("torch-cuda-unavailable", "The current Python's torch cannot use CUDA, so GPU conversion is not possible.", Severity.ERROR,
+                                    ("Choose CPU conversion in step 2; the produced model still runs inference on the NVIDIA GPU.", "Or install a driver-matched CUDA torch for the current Python.")))
         return found
 
     def _assess_target(self, config: ForgeConfig, inspection: ModelInspection,
@@ -158,7 +158,7 @@ class ForgePlanner:
         """Serving profile and resource estimate for the selected recipe."""
         requested = config.runtime.get("speculative", "auto")
         if requested in ("mtp", "dflash2") and not spec_step.details.get(requested):
-            diagnostics.append(Diagnostic("speculative-component-missing", f"模型没有兼容的 {requested.upper()} 组件，请选择自动或关闭；程序不会自行训练或替换。", Severity.ERROR))
+            diagnostics.append(Diagnostic("speculative-component-missing", f"The model has no compatible {requested.upper()} component; choose auto or off. The program never trains or substitutes one.", Severity.ERROR))
         serving_summary = serving.serving_summary(
             recipe, inspection.config, config.runtime,
             mtp=bool(spec_step.details.get("mtp")),
@@ -221,14 +221,14 @@ class ForgePlanner:
         found = processor.check(inspection)
         diagnostics.extend(found)
         if processor.capability.requires_high_precision and inspection.weight_precision not in ("bf16", "fp16", "fp32"):
-            diagnostics.append(Diagnostic("jailbreak-precision", "越狱需要原始 BF16/FP16/FP32 权重；当前输入不符合。", Severity.ERROR))
+            diagnostics.append(Diagnostic("jailbreak-precision", "Abliteration needs original BF16/FP16/FP32 weights; the current input does not qualify.", Severity.ERROR))
         if config.jailbreak == "abliteration":
             from .jailbreak.processors import _TRANSFORMERS_AVAILABLE
             direction = config.jailbreak_params.get("direction_file")
             if direction and (not isinstance(direction, str) or not Path(direction).is_file()):
-                diagnostics.append(Diagnostic("direction-file-missing", "拒绝方向文件不存在，请重新选择 .npy/.pt 文件。", Severity.ERROR))
+                diagnostics.append(Diagnostic("direction-file-missing", "The refusal direction file does not exist; select a .npy/.pt file again.", Severity.ERROR))
             elif not direction and not _TRANSFORMERS_AVAILABLE:
-                diagnostics.append(Diagnostic("calibration-unavailable", "自动标定需要 transformers；请安装后重启，或提供已有拒绝方向向量。", Severity.ERROR))
+                diagnostics.append(Diagnostic("calibration-unavailable", "Automatic calibration needs transformers; install it and restart, or provide an existing refusal direction vector.", Severity.ERROR))
         blocked = any(item.severity == Severity.ERROR for item in found)
         capability = processor.capability
         steps.append(PlanStep(
@@ -282,7 +282,7 @@ class ForgePlanner:
         retained = set((selection.retained_components(recipe, inspection, config.sources) or "text").split(","))
         for name in ("mtp","dflash2"):
             if (inspection.speculative_components.get(name,{}).get("detected") or config.sources.get(name)) and name not in retained:
-                diagnostics.append(Diagnostic("speculative-would-be-dropped",f"当前路线无法保留输入自带的 {name.upper()}，已阻止转换；请选择能封装该组件的路线，不能静默丢弃。",Severity.ERROR))
+                diagnostics.append(Diagnostic("speculative-would-be-dropped",f"The current route cannot retain the input's own {name.upper()}; conversion was blocked. Choose a route that packages this component; it must not be silently dropped.",Severity.ERROR))
 
         blocked = not (self.upstream.found and self.upstream.torch_available)
         missing = [s for s in recipe.extra_sources if s not in config.sources]
@@ -348,7 +348,7 @@ class ForgePlanner:
         if requested == "mtp": has_dflash2 = False
         if requested == "dflash2": has_mtp = False
         if config.runtime.get("speculative") == "none":
-            return PlanStep("speculative", "已保留组件，服务时关闭推测解码以节省显存", "skipped", {"mtp": False, "dflash2": False})
+            return PlanStep("speculative", "Components retained; speculative decoding disabled at serving time to save VRAM", "skipped", {"mtp": False, "dflash2": False})
         if has_mtp or has_dflash2:
             return PlanStep("speculative", "import detected components", "planned", {
                 "mtp": has_mtp,

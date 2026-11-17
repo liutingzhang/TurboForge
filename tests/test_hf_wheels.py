@@ -25,5 +25,5 @@ def test_cuda_wheels_use_publisher_hashes_and_persistent_downloads(tmp_path,monk
 def test_untrusted_wheel_host_never_downloaded(tmp_path,monkeypatch):
     monkeypatch.setattr('turboforge.backends.hf_wheels.subprocess.run',lambda *a,**kw:SimpleNamespace(stdout='cp313'))
     monkeypatch.setattr('turboforge.bootstrap.read_url',lambda _:f'<a href="https://evil.example/torch-2.14.1%2Bcu130-cp313-cp313-win_amd64.whl#sha256={"a"*64}">x</a>'.encode())
-    with pytest.raises(RuntimeError,match='来源'):
+    with pytest.raises(RuntimeError,match='source or release digest'):
         cuda_wheels(tmp_path/'python.exe',tmp_path,lambda _:None)

@@ -77,7 +77,7 @@ def disk_available(path: str | Path) -> int:
 # engine-download whitelist (which gates 7.0/7.5/8.0/8.6/8.9/12.0 and raises).
 _GPU_GENERATIONS = {
     12.0: "Blackwell · RTX 50",
-    10.0: "Blackwell · 数据中心",
+    10.0: "Blackwell · data center",
     9.0: "Hopper",
     8.9: "Ada · RTX 40",
     8.6: "Ampere · RTX 30",

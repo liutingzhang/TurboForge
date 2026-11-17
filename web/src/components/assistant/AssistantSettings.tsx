@@ -27,7 +27,7 @@ export default function AssistantSettings({config, onSaved}: {config: AssistantC
     const value = input(); setKey('');
     try {
       const result = await assistantApi.test(value); setTested(result.tested_config_id);
-      setNotice(`文本调用测试成功，${result.latency_ms} ms；配置保留在后端 5 分钟，可直接应用。`);
+      setNotice(`Text call test succeeded, ${result.latency_ms} ms; the config is kept on the backend for 5 minutes and can be applied directly.`);
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   };
@@ -35,7 +35,7 @@ export default function AssistantSettings({config, onSaved}: {config: AssistantC
     setBusy(true); setError('');
     const value = tested ? {tested_config_id: tested, scope} : input(); setKey('');
     try {
-      const result = await assistantApi.save(value); setNotice(result.notice ?? '配置已应用');
+      const result = await assistantApi.save(value); setNotice(result.notice ?? 'Configuration applied');
       await onSaved();
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
@@ -47,35 +47,35 @@ export default function AssistantSettings({config, onSaved}: {config: AssistantC
     finally { setBusy(false); }
   };
   return <div className="ai-settings" data-ai-id="assistant.settings" data-ai-ignore>
-    <p className="muted">生效来源：{({default:'未配置',environment:'进程环境变量',dotenv:'本机 .env',session:'本次会话'} as Record<string,string>)[config.source] ?? config.source}。已有密钥只显示配置状态。</p>
+    <p className="muted">Effective source: {({default:'Not configured',environment:'Process environment variables',dotenv:'Local .env',session:'This session'} as Record<string,string>)[config.source] ?? config.source}. Existing keys only show their configuration status.</p>
     {config.config_error && <Alert type="error" message={config.config_error} showIcon />}
     <label htmlFor="ai-base">Base URL</label>
     <Input id="ai-base" value={base} placeholder="https://llm.example.com/v1" disabled={busy} onChange={e => {
       changed(); setBase(e.target.value);
       try { if (new URL(e.target.value).origin !== new URL(config.base_url).origin) {setAction('replace'); setKey('');} } catch { setAction('replace'); }
     }} />
-    <small>填写接口根地址，不要填写 /chat/completions。远端使用 HTTPS。</small>
-    <label htmlFor="ai-model">模型名称（实际 API 模型 ID）</label>
+    <small>Enter the API base URL, not /chat/completions. Use HTTPS for remote services.</small>
+    <label htmlFor="ai-model">Model name (the actual API model ID)</label>
     <Input id="ai-model" value={model} disabled={busy} onChange={e => {changed(); setModel(e.target.value);}} />
-    <Checkbox checked={local} disabled={busy} onChange={e => {changed(); setLocal(e.target.checked); setKey(''); setAction(e.target.checked ? 'clear' : 'replace');}}>本地服务无需 API Key（需管理员允许该 origin）</Checkbox>
+    <Checkbox checked={local} disabled={busy} onChange={e => {changed(); setLocal(e.target.checked); setKey(''); setAction(e.target.checked ? 'clear' : 'replace');}}>Local services need no API key (the admin must allow this origin)</Checkbox>
     {!local && <>
-      <label>API Key · {config.has_api_key ? '后端已配置' : '尚未配置'}</label>
-      <Select aria-label="密钥操作" value={action} disabled={busy} options={[
-        {value:'keep',label:'保留当前 Key',disabled:!config.has_api_key}, {value:'replace',label:'输入/替换 Key'}, {value:'clear',label:'清除 Key'},
+      <label>API Key · {config.has_api_key ? 'configured on the backend' : 'not configured yet'}</label>
+      <Select aria-label="Key action" value={action} disabled={busy} options={[
+        {value:'keep',label:'Keep current key',disabled:!config.has_api_key}, {value:'replace',label:'Enter/replace key'}, {value:'clear',label:'Clear key'},
       ]} onChange={value => {changed(); setAction(value); setKey('');}} />
       {action === 'replace' && <Input.Password aria-label="API Key" value={key} autoComplete="off" disabled={busy}
-        placeholder={tested ? '测试后的 Key 已清空，可直接应用' : '仅发送到本机后端，不进入聊天内容'} onChange={e => {changed(); setKey(e.target.value);}} />}
+        placeholder={tested ? 'The tested key was cleared; you can apply directly' : 'Sent only to the local backend, never into chat content'} onChange={e => {changed(); setKey(e.target.value);}} />}
     </>}
-    <div className="ai-setting-row"><span>流式回答</span><Switch checked={stream} disabled={busy} onChange={value => {changed(); setStream(value);}} /></div>
-    <label>服务上下文上限（token）</label><InputNumber aria-label="服务上下文上限" min={256} max={1048576} value={context} disabled={busy} onChange={v => {if (v !== null) {changed(); setContext(v);}}} />
-    <label>输出上限（token）</label><InputNumber aria-label="输出上限" min={16} max={32768} value={output} disabled={busy} onChange={v => {if (v !== null) {changed(); setOutput(v);}}} />
-    <label>总超时（秒）</label><InputNumber aria-label="总超时" min={5} max={300} value={timeout} disabled={busy} onChange={v => {if (v !== null) {changed(); setTimeoutValue(v);}}} />
-    <label>保存方式</label><Select value={scope} disabled={busy} onChange={setScope} options={[
-      {value:'session',label:'仅本次会话（推荐）'}, {value:'dotenv',label:'本机 .env 全局默认',disabled:!config.allow_persist},
+    <div className="ai-setting-row"><span>Streaming answers</span><Switch checked={stream} disabled={busy} onChange={value => {changed(); setStream(value);}} /></div>
+    <label>Service context limit (tokens)</label><InputNumber aria-label="Service context limit" min={256} max={1048576} value={context} disabled={busy} onChange={v => {if (v !== null) {changed(); setContext(v);}}} />
+    <label>Output limit (tokens)</label><InputNumber aria-label="Output limit" min={16} max={32768} value={output} disabled={busy} onChange={v => {if (v !== null) {changed(); setOutput(v);}}} />
+    <label>Total timeout (seconds)</label><InputNumber aria-label="Total timeout" min={5} max={300} value={timeout} disabled={busy} onChange={v => {if (v !== null) {changed(); setTimeoutValue(v);}}} />
+    <label>Save method</label><Select value={scope} disabled={busy} onChange={setScope} options={[
+      {value:'session',label:'This session only (recommended)'}, {value:'dotenv',label:'Local .env global default',disabled:!config.allow_persist},
     ]} />
-    <small>测试会产生一次短文本调用费用。Key 提交后立即清空输入框。会话配置过期/重启后丢失；.env 为明文文件，默认禁止网页持久化。</small>
+    <small>Testing incurs one short text-call charge. The key input is cleared immediately after submission. Session config is lost on expiry/restart; .env is a plaintext file and web persistence is disabled by default.</small>
     {error && <Alert type="error" message={error} showIcon />}
     {notice && <Alert type="success" message={notice} showIcon />}
-    <Space wrap><Button onClick={test} loading={busy}>测试连接</Button><Button type="primary" onClick={save} disabled={busy || Boolean(config.config_error)}>应用配置</Button><Button onClick={reset} disabled={busy}>恢复服务端默认</Button></Space>
+    <Space wrap><Button onClick={test} loading={busy}>Test connection</Button><Button type="primary" onClick={save} disabled={busy || Boolean(config.config_error)}>Apply configuration</Button><Button onClick={reset} disabled={busy}>Restore server defaults</Button></Space>
   </div>;
 }

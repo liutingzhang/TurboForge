@@ -44,7 +44,7 @@ export function usePageSelection(active: boolean, onSelect: (blocks: SelectionBl
           const block = element ? blockFrom(element) : null;
           blocks = block ? [block] : [];
         }
-        if (!blocks.length) onError('这里没有可读取文案；图片、跨域内容请改选说明或自行输入');
+        if (!blocks.length) onError('No readable text here; for images or cross-origin content, select the description instead or type it yourself');
         else onSelect(blocks);
       } catch (error) { onError((error as Error).message); }
       start = null;

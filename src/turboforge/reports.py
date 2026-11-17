@@ -307,10 +307,10 @@ def quality_gate(quality: dict, limit: float) -> dict:
     current = metrics["perplexity"]
     baseline = metrics["baseline_perplexity"]
     if any(entry.get("status") != "measured" for entry in (current, baseline)):
-        return {"status":"not_measured", "note":"质量测量未成功，不能判定通过"}
+        return {"status":"not_measured", "note":"Quality measurement did not succeed; a pass cannot be asserted"}
     value, reference = current["value"], baseline["value"]
     if not all(isinstance(x, (int,float)) and math.isfinite(x) and x > 0 for x in (value,reference)):
-        return {"status":"not_measured", "note":"困惑度无效，不能判定通过"}
+        return {"status":"not_measured", "note":"Perplexity is invalid; a pass cannot be asserted"}
     increase = value / reference - 1
     return {"status":"passed" if increase <= limit else "failed", "relative_increase":increase,
-            "maximum_relative_increase":limit, "note":"同语料 PPL 比较；不代表所有任务的能力或越狱效果"}
+            "maximum_relative_increase":limit, "note":"Same-corpus PPL comparison; does not represent every task's ability or abliteration effect"}

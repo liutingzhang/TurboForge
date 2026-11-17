@@ -1,116 +1,118 @@
 # TurboForge
 
-新模型发布后，要在自己的显卡上跑起来、跑得动、上下文拉得长，先把权重变成这台机器能用的产物，再交给对应的推理框架。TurboForge 做前半段：识别、量化、验收。Dense 产物交给 NInfer；MoE 按显卡交给 Basalt 或 Strata。
+When a new model comes out, running it on your own GPU — fast enough, with a long context — takes two steps: turn the weights into something this machine can run, then hand that file to the right inference engine. TurboForge does the first half. Dense artifacts go to NInfer; MoE goes to Basalt or Strata depending on the GPU.
 
-[English](README_EN.md) · [Apache-2.0](LICENSE) · [第三方许可](NOTICE) · [配置模板](.env.example)
+[Chinese README (main branch)](https://github.com/liutingzhang/NInfer-TurboForge/blob/main/README.md) · [Apache-2.0](LICENSE) · [Third-party notices](NOTICE) · [Configuration template](.env.example)
 
-**Windows 10/11 x64 + NVIDIA 显卡。双击启动，在网页里完成：选模型 → 检查 → 选量化 → 转换 → 验收 → 启动 API。**
+> This branch is the **English edition**: the web UI, built-in help, and assistant are English-only. The Chinese edition lives on `main`.
 
-## 它帮你做什么
+**Windows 10/11 x64 + an NVIDIA GPU. Double-click, then in the browser: pick a model → inspect → choose quantization → convert → validate → start the API.**
 
-- **认模型**：读配置、几何和权重，不靠文件名猜测。支持 Hugging Face Safetensors、受支持的 NVFP4 和 GGUF。
-- **选量化**：只列出当前模型和引擎能用的方案。显卡有原生 FP4/FP8 时，对应方案排在前面。
-- **跑起来**：自动准备环境，转换后做 GPU 加载检查，可选测速和质量门禁，然后启动本机 OpenAI 兼容接口。
-- **选引擎**：Dense 用 ninfer-fusion-kvmem 拉长上下文；RTX 50 上已适配的 MoE 用 Basalt；其他 MoE 用 Strata。
+## What you get
 
-现成聊天工具直接打开别人做好的模型。TurboForge 把你自己的、微调过的或越狱过的权重，做成这台电脑上可复现的模型服务。
+- **Identification** from config, geometry, and weights — not from the file name. Hugging Face Safetensors, supported NVFP4, and GGUF.
+- **Quantization choices** limited to recipes this model and engine can actually run. Native FP4/FP8 moves up the list when the GPU supports it.
+- **A local service**: environments are prepared for you, the GPU load is checked, speed and quality are optional, then an OpenAI-compatible API starts.
+- **An engine recommendation**: ninfer-fusion-kvmem for dense models and long context; Basalt for published MoE models on RTX 50; Strata for other MoE models.
 
-## 安装并打开
+A chat app opens a model someone else already prepared. TurboForge turns your own, fine-tuned, or abliterated weights into a model service you can reproduce on this PC.
 
-发布包拆成两个 zip，两个都必须下载：
+## Install and open
 
-1. 下载 `TurboForge-Windows-x64-part1.zip` 和 `TurboForge-Windows-x64-part2.zip`，放在同一个文件夹。GitHub 单文件限制 2 GB，所以拆成两包。
-2. 在同一个父目录分别解压两个包，例如都解压到 `D:\`；提示合并时选择合并，最后得到 `D:\TurboForge`。
-3. 打开 `TurboForge`，双击 **`启动 TurboForge.bat`**，等浏览器打开。窗口不要关，关掉就会停服务。
-4. 网页打不开时，看窗口里打印的地址。默认是 `http://127.0.0.1:8090`，这个端口被占用会自动换一个。
+The release is split into two ZIP files; both are required:
 
-卸载：删除整个 `TurboForge` 文件夹。用过 HF 路线时，再删除 `%LOCALAPPDATA%\NInferTurboForge`，那里是下载的 Python/HF 环境。模型和构建记录都在 `TurboForge` 目录内，删目录即可清理。
+1. Download `TurboForge-Windows-x64-english-part1.zip` and `TurboForge-Windows-x64-english-part2.zip` into the same folder. GitHub's 2 GB per-file limit is why the release is split.
+2. Extract both into the same parent folder, for example `D:\`; choose Merge when Windows asks. You should end up with `D:\TurboForge`.
+3. Open `TurboForge` and double-click **`Start TurboForge.bat`**. Leave the window open; closing it stops the service.
+4. If the page does not open, use the address printed in that window. The default is `http://127.0.0.1:8090`. If 8090 is taken, another port is chosen.
 
-首次需要联网，也需要已经装好的 NVIDIA 驱动。不用预先安装 Git、Node.js、Python 或 CUDA Toolkit。两个包合计约 3.5 GB，带源码、网页、Python 3.13.18 和匹配的 NInfer 引擎，不含模型和个人密钥。校验值在 `SHA256SUMS.txt`，缺任何一个包都无法启动。
+Uninstall: delete the whole `TurboForge` folder. If you used the HF route, also delete `%LOCALAPPDATA%\NInferTurboForge`, which holds downloaded Python/HF environments. Models and build records live inside `TurboForge`, so deleting the folder is a full cleanup.
 
-只想检查环境、不做转换：
+The first run needs the internet and an NVIDIA driver that is already installed. You do not need Git, Node.js, Python, or the CUDA Toolkit beforehand. The two parts total about 3.5 GB and include source, the web page, Python 3.13.18, and a matched NInfer engine. They do not include models or personal keys. Checksums are in `SHA256SUMS.txt`; both parts are required.
+
+Check the machine without converting:
 
 ```powershell
-.\"启动 TurboForge.bat" --check
+.\"Start TurboForge.bat" --check
 ```
 
-结果在 `.turboforge/deployment.json`，日志在 `.turboforge/logs/`。
+The report is `.turboforge/deployment.json`. Logs are in `.turboforge/logs/`.
 
-从源码启动时，先准备 Python 环境。转换还需要匹配的 NInfer 源码和引擎：用 `TURBOFORGE_NINFER_SRC` 指向包含 `tools/convert` 的目录，用 `TURBOFORGE_NINFER_BIN` 指向引擎目录；用整合包时无需设置。
+To run from source, create a virtual environment. Conversion also needs a matched NInfer source and engine: point `TURBOFORGE_NINFER_SRC` at the directory containing `tools/convert`, and `TURBOFORGE_NINFER_BIN` at the engine directory. The bundle needs neither.
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe scripts\start_web.py
 ```
 
-## 使用：六步到本机 API
+## Six steps to a local API
 
-1. **选模型**  
-   填本机目录、具体 GGUF 文件，或 Hugging Face 的 `组织/模型名`。完整 HF 目录留空「原始模型来源」。Qwen3.5 dense、hidden size 1024 的单文件 Q8_0 GGUF 可直接用；其他 GGUF 需要配上原始模型目录或仓库。
+1. **Pick a model**  
+   Enter a local folder, a GGUF file, or a Hugging Face `org/name`. Leave "original model source" empty for a full HF folder. A single-file Qwen3.5 dense Q8_0 GGUF with hidden size 1024 can be used as-is. Other GGUF files need the original model folder or repository.
 
-2. **检查**  
-   页面读取架构、大小、分片和量化方式，同时看显卡型号、计算能力和显存。当前组合可用才会继续。
+2. **Inspect**  
+   The page reads architecture, size, shards, and quantization, plus the GPU name, compute capability, and VRAM. It continues when the combination is supported.
 
-3. **选量化**  
-   选 `auto`，或从列表里指定一个方案。列表只含已适配配方。有多种 NVFP4 时需要你自己选一种。已经量化好的权重只导入，不再假装重新高精度编辑。
+3. **Choose quantization**  
+   Pick `auto` or one recipe from the list. Only adapted recipes appear. If several NVFP4 layouts exist, pick one. Weights that are already quantized are imported; they are not edited again as if they were full precision.
 
-4. **转换**  
-   首次会下载并校验依赖。产物、日志和记录在 `.turboforge/builds/`。大模型请预留内存和临时磁盘，不要只按最终文件大小估算。
+4. **Convert**  
+   The first run downloads and checks dependencies. Outputs, logs, and records go to `.turboforge/builds/`. Leave RAM and temporary disk space; the final file size is not the whole cost.
 
-5. **验收**  
-   通过后表示 GPU 能加载。质量门禁和测速分开显示：测了才有数字。已有 Qwen3.5-0.8B GPTQ 4-bit 记录：PPL 20.6995 → 21.7993（+5.31%），三次 64 token 生成平均 21.27 tok/s。
+5. **Validate**  
+   A pass means the GPU can load the model. Quality and speed are reported only when they were measured. One Qwen3.5-0.8B GPTQ 4-bit run recorded PPL 20.6995 → 21.7993 (+5.31%) and 21.27 tok/s over three 64-token generations.
 
-6. **启动**  
-   打开构建目录里的 `scripts/run.bat`。再用下面的地址确认模型服务：
+6. **Start**  
+   Open `scripts/run.bat` in the build folder, then confirm the model server:
 
 ```powershell
 curl.exe http://127.0.0.1:18080/v1/models
 ```
 
-端口以结果页为准。默认模型端口来自 `.env` 里 `TURBOFORGE_AI_ALLOWED_LOCAL_ORIGINS` 的第一个地址，模板是 `18080`。网页端口 `8090` 和模型端口不是同一个。
+Use the port on the results page. The default comes from the first address in `TURBOFORGE_AI_ALLOWED_LOCAL_ORIGINS` in `.env`; the template uses `18080`. Port `8090` is the web page, not the model API.
 
-调用示例：
+Example call:
 
 ```powershell
 curl.exe http://127.0.0.1:18080/v1/chat/completions `
   -H "Content-Type: application/json" `
-  -d "{\"model\":\"<上一步返回的 id>\",\"messages\":[{\"role\":\"user\",\"content\":\"用一句话解释 KV cache\"}]}"
+  -d "{\"model\":\"<id from the previous call>\",\"messages\":[{\"role\":\"user\",\"content\":\"Explain KV cache in one sentence\"}]}"
 ```
 
-## 转换之后用哪套引擎
+## Which engine to use after conversion
 
-| 你的模型 | 建议 | 文件 |
+| Your model | Use | File |
 | --- | --- | --- |
-| Dense | [ninfer-fusion-kvmem](https://github.com/1314521gjy/ninfer-fusion-kvmem)：显存放 KV 窗口，其余放内存 | `.ninfer` |
-| MoE，且是 RTX 50（计算能力 12.0），模型为 Qwen3.8-Flash-Next 或 DeepSeek-V4.1-Flash | [Basalt](https://github.com/jesdga95/basalt) | `.basalt` |
-| 其他 MoE，含 Qwen3.6-35B-A3B | [Strata](https://github.com/Niko1221/Strata) | GGUF |
+| Dense | [ninfer-fusion-kvmem](https://github.com/1314521gjy/ninfer-fusion-kvmem): KV window on the GPU, the rest in RAM | `.ninfer` |
+| MoE on RTX 50 (compute 12.0), and the model is Qwen3.8-Flash-Next or DeepSeek-V4.1-Flash | [Basalt](https://github.com/jesdga95/basalt) | `.basalt` |
+| Other MoE, including Qwen3.6-35B-A3B | [Strata](https://github.com/Niko1221/Strata) | GGUF |
 
-页面会给出仓库链接和启动步骤。三种文件不能互相直接替换。数据中心 Blackwell（计算能力 10.0）用 Strata，不用 Basalt。
+The page shows the repository link and the launch steps. The three file types are not drop-in replacements. Datacenter Blackwell (compute 10.0) uses Strata, not Basalt.
 
-Qwen3.5-0.8B 这条独立 GGUF 路线的上下文上限是 1024 token，页面会自动填上。更长的上下文用 ninfer-fusion-kvmem 的 KV 分层。并发在启动服务时设置，先看显存够不够。
+The standalone Qwen3.5-0.8B GGUF path is limited to 1024 tokens; the page fills that in. For a longer context, use ninfer-fusion-kvmem's KV tiers. Set concurrency when you start the server, after checking VRAM.
 
-## 使用时注意
+## While you use it
 
-- HF 路线会保留已有的 MTP/DFlash2 文件；要真正跑这些加速头，用兼容的 NInfer 服务。
-- Qwen3.5 新量化走 GPTQ 或 NInfer。已有的标准 AWQ 可以导入。
-- 质量门禁默认用英文 WikiText。中文、代码、数学可以另备评测文本。
-- 适合本机单人使用。要开放到公网，自己加鉴权和访问控制。
+- The HF path keeps existing MTP/DFlash2 files. To actually run those heads, use a compatible NInfer server.
+- New Qwen3.5 quantization uses GPTQ or NInfer. An existing standard AWQ checkpoint can be imported.
+- The quality gate uses English WikiText by default. Bring your own text for other languages, code, or math.
+- Built for one person on one PC. Add your own auth and access control before exposing it on the public internet.
 
-## 排错
+## If something fails
 
-| 现象 | 处理 |
+| What you see | What to do |
 | --- | --- |
-| 窗口马上关掉 | 看窗口里的错误；再运行 `启动 TurboForge.bat --check` |
-| 网页打不开 | 用窗口里打印的地址，不要死记 8090 |
-| API 连不上 | 用结果页端口，先访问 `/v1/models` |
-| 磁盘不够 | 在页面删除失败的构建；成功模型和原始模型会保留 |
-| 换了目录后启动失败 | 删掉对应虚拟环境目录，重新双击启动，模型和构建结果留着 |
+| The window closes at once | Read the error, then run `Start TurboForge.bat --check` |
+| The page does not open | Use the address printed in the window, not a memorized 8090 |
+| The API does not answer | Use the port on the results page and open `/v1/models` first |
+| Disk is full | Delete failed builds in the page; finished models and originals stay |
+| It fails after you moved the folder | Delete that virtual environment and start again; keep models and builds |
 
-## 友情链接
+## Related projects
 
-- [ninfer-fusion-kvmem](https://github.com/1314521gjy/ninfer-fusion-kvmem)：Dense、长上下文
-- [Strata](https://github.com/Niko1221/Strata)：MoE，覆盖 RTX 20/30/40/50
-- [Basalt](https://github.com/jesdga95/basalt)：RTX 50 上已适配的 MoE
-- [NInfer 上游](https://github.com/iamwavecut/ninfer-all)：转换与引擎来源
+- [ninfer-fusion-kvmem](https://github.com/1314521gjy/ninfer-fusion-kvmem): dense models, long context
+- [Strata](https://github.com/Niko1221/Strata): MoE on RTX 20/30/40/50
+- [Basalt](https://github.com/jesdga95/basalt): published MoE models on RTX 50
+- [NInfer upstream](https://github.com/iamwavecut/ninfer-all): conversion and engine source
 
-各仓库的许可证和模型列表以对方页面为准。没有许可证文件的 `ninfer-kvmem-actkv` 不在推荐里。
+Licenses and model lists belong to those repositories. `ninfer-kvmem-actkv` has no license file and is not recommended.

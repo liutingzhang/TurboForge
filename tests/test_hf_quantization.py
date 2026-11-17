@@ -72,7 +72,7 @@ def test_packed_payload_must_match_shape(tmp_path):
     header["layer.scales"]["data_offsets"][1]-=2
     encoded=json.dumps(header).encode()
     path.write_bytes(struct.pack("<Q",len(encoded))+encoded+data[8+length:])
-    with pytest.raises(ValueError,match="字节数"):
+    with pytest.raises(ValueError,match="actual byte count"):
         checkpoint_receipt(tmp_path)
 
 
@@ -85,7 +85,7 @@ def test_conflicting_quantization_metadata_rejected(extra):
 def test_calibration_cannot_inflate_sample_count_with_overlapping_windows(tmp_path):
     from turboforge.backends.hf_worker import calibration_examples
     path=tmp_path/"calibration.txt";path.write_text("fixture",encoding="utf-8")
-    with pytest.raises(ValueError,match="不重叠"):
+    with pytest.raises(ValueError,match="non-overlapping samples"):
         calibration_examples(lambda *a,**kw:{"input_ids":list(range(640))},
                              {"calibration_file":str(path),"samples":128,"sequence_length":512},tmp_path)
     samples=calibration_examples(lambda *a,**kw:{"input_ids":list(range(1024))},
@@ -97,7 +97,7 @@ def test_calibration_cannot_inflate_sample_count_with_overlapping_windows(tmp_pa
 def test_equal_calibration_and_evaluation_content_rejected_before_install(tmp_path):
     first=tmp_path/"train.txt";second=tmp_path/"test.txt"
     first.write_text("same content",encoding="utf-8-sig");second.write_text("same content",encoding="utf-8")
-    with pytest.raises(ValueError,match="相同内容"):
+    with pytest.raises(ValueError,match="identical content"):
         validate_options(forge(tmp_path,run_benchmark=True,quantization={"calibration_file":str(first)},benchmark={"perplexity_text":str(second)}))
 
 
@@ -157,7 +157,7 @@ def test_failed_qwen35_awq_creation_is_not_offered_or_executable(tmp_path):
     config=forge(tmp_path)
     inspection=ModelInspection(path=config.input_path,input_kind=InputKind.SAFETENSORS,
         config=model_config(),weight_precision='bf16',tokenizer_files=['tokenizer.json'])
-    assert any('已停用' in item.message for item in plan(config,inspection).diagnostics)
+    assert any('is disabled' in item.message for item in plan(config,inspection).diagnostics)
 
 
 @pytest.mark.parametrize('status',['failed','quality-rejected','converted','validating'])
@@ -165,7 +165,7 @@ def test_direct_serve_cannot_bypass_recorded_validation_or_quality_failure(tmp_p
     model=tmp_path/'model-hf';model.mkdir()
     packed_fixture(model);checkpoint_receipt(model)
     (tmp_path/'manifest.json').write_text(json.dumps({'status':status}),encoding='utf-8')
-    with pytest.raises(ValueError,match='不能直接启动'):
+    with pytest.raises(ValueError,match='cannot be started directly'):
         verify_checkpoint(model)
 
 
@@ -190,7 +190,7 @@ def test_hf_quality_gate_uses_automatic_reference(tmp_path):
     config=forge(tmp_path,run_benchmark=True,benchmark={"perplexity_text":str(corpus),"max_ppl_relative_increase":.1})
     config.validate()
     validate_options(config)
-    with pytest.raises(ValueError,match="基准"):
+    with pytest.raises(ValueError,match="baseline artifact"):
         ForgeConfig.from_dict({**asdict(config),"target":"qwen3_5_gguf"})
 
 
@@ -212,7 +212,7 @@ def test_import_cannot_use_itself_as_high_precision_reference(tmp_path):
         config=model_config(quantization_config={"quant_method":"awq","bits":4}),tokenizer_files=["tokenizer.json"])
     result=plan(config,inspection)
     assert not result.executable
-    assert any("自身" in d.message for d in result.diagnostics)
+    assert any("its own quality-gate baseline" in d.message for d in result.diagnostics)
 
 
 @pytest.mark.parametrize("method,bits",[("awq",4),("gptq",2),("gptq",3),("gptq",4),("gptq",8)])
@@ -225,7 +225,7 @@ def test_packed_receipt_checks_shapes_and_detects_changed_files(tmp_path,method,
     })
     checkpoint_receipt(tmp_path);verify_checkpoint(tmp_path)
     (tmp_path/"config.json").write_text("{}",encoding="utf-8")
-    with pytest.raises(ValueError,match="损坏"):
+    with pytest.raises(ValueError,match="corrupt or altered"):
         verify_checkpoint(tmp_path)
 
 

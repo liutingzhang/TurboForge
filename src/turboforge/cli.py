@@ -115,11 +115,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_auto = sub.add_parser("auto", help="只提供模型，自动下载依赖和工具并转换")
-    p_auto.add_argument("model", help="本机路径、Hugging Face 组织/模型名或仓库链接")
+    p_auto = sub.add_parser("auto", help="Provide only the model; dependencies and tools are downloaded automatically and conversion runs")
+    p_auto.add_argument("model", help="A local path, Hugging Face org/model name, or repository link")
     p_auto.add_argument("--jailbreak", choices=("none", "abliteration"), default="none")
     p_auto.add_argument("--bench", action="store_true")
-    p_auto.add_argument("--target", default="auto", help="NInfer 配方，或 hf_awq_4 / hf_gptq_2/3/4/8 / hf_packed_import")
+    p_auto.add_argument("--target", default="auto", help="An NInfer recipe, or hf_awq_4 / hf_gptq_2/3/4/8 / hf_packed_import")
     p_auto.add_argument("--speculative",choices=("auto","none","mtp","dflash2"),default="auto")
     p_auto.add_argument("--output", default=None)
 
@@ -129,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_recipes = sub.add_parser("recipes", help="list verified conversion recipes")
     p_recipes.add_argument("--json", action="store_true")
-    p_recipes.add_argument("--hf", action="store_true", help="列出独立 HF 引擎的 AWQ/GPTQ 路线")
+    p_recipes.add_argument("--hf", action="store_true", help="List the AWQ/GPTQ routes of the standalone HF engine")
 
     p_plan = sub.add_parser("plan", help="derive and display a build plan")
     _add_common_build_args(p_plan)
@@ -185,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(message, flush=True)
                 last = message
             if state["finished"]:
-                print("输出目录：" + state["output_dir"])
+                print("Output directory: " + state["output_dir"])
                 if state["error"]:
                     print(state["error"], file=sys.stderr)
                 return 0 if state["status"] == "validated" else 1

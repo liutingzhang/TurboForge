@@ -1,12 +1,12 @@
 import type { SelectionBlock } from '../api/assistant';
 
 export function redact(text: string): string {
-  return text.replace(/(bearer\s+)[^\s"'<>]+/gi, '$1<已隐藏>')
-    .replace(/((?:api[_-]?key|access[_-]?token|password|secret)\s*[=:]\s*["']?)[^\s,;"']+/gi, '$1<已隐藏>')
-    .replace(/\b(?:sk-|hf_)[A-Za-z0-9_-]{12,}/g, '<已隐藏密钥>')
-    .replace(/([?&](?:key|token|api_key|access_token)=)[^&\s]+/gi, '$1<已隐藏>')
-    .replace(/[A-Za-z]:[\\/][^\n\r"'<>|]*/g, '<本机路径>')
-    .replace(/(^|\s)\/(?:home|Users|mnt|tmp|var|root)\/[^\n\r"'<>|]*/g, '$1<本机路径>');
+  return text.replace(/(bearer\s+)[^\s"'<>]+/gi, '$1<hidden>')
+    .replace(/((?:api[_-]?key|access[_-]?token|password|secret)\s*[=:]\s*["']?)[^\s,;"']+/gi, '$1<hidden>')
+    .replace(/\b(?:sk-|hf_)[A-Za-z0-9_-]{12,}/g, '<key hidden>')
+    .replace(/([?&](?:key|token|api_key|access_token)=)[^&\s]+/gi, '$1<hidden>')
+    .replace(/[A-Za-z]:[\\/][^\n\r"'<>|]*/g, '<local path>')
+    .replace(/(^|\s)\/(?:home|Users|mnt|tmp|var|root)\/[^\n\r"'<>|]*/g, '$1<local path>');
 }
 
 const ignored = '[data-ai-ignore],.ai-drawer-root,.ai-launcher,.ai-selection-toolbar,.ai-selection-rectangle,script,style,input[type="password"],input[type="hidden"],iframe';
@@ -59,7 +59,7 @@ export function extractText(root: Element, area?: DOMRect, selection?: Range): s
       text = text.slice(start, end);
     }
     if (text.trim()) { parts.push(text.trim()); length += text.length; }
-    if (length > 24000) { parts.push('（范围过大，请缩小选取）'); break; }
+    if (length > 24000) { parts.push('(scope too large; narrow the selection)'); break; }
   }
   // Read only explicitly marked ordinary values, never arbitrary input.value.
   for (const input of root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input[data-ai-value],textarea[data-ai-value]')) {
@@ -81,7 +81,7 @@ export function blockFrom(element: Element, area?: DOMRect, range?: Range): Sele
   const text = extractText(root, area, range);
   if (!text) return null;
   const code = root.getAttribute('data-ai-code');
-  return {id: selectionId(root), title: root.getAttribute('data-ai-title') ?? root.querySelector('.notice-title,label,h1,h2,h3,.panel-title,.fact-label,.stat-label,.meter-head')?.textContent?.trim() ?? (root.matches('p,li') ? '说明文字' : '页面选区'),
+  return {id: selectionId(root), title: root.getAttribute('data-ai-title') ?? root.querySelector('.notice-title,label,h1,h2,h3,.panel-title,.fact-label,.stat-label,.meter-head')?.textContent?.trim() ?? (root.matches('p,li') ? 'Explanatory text' : 'Page selection'),
     text, ...(code ? {code} : {})};
 }
 
@@ -108,14 +108,14 @@ export function areaSelection(area: DOMRect): SelectionBlock[] {
     if (roots.has(root)) continue;
     const block = blockFrom(root, area);
     if (block) roots.set(root, block);
-    if (roots.size > 5) throw new Error('框选超过 5 个区域，请缩小范围');
+    if (roots.size > 5) throw new Error('Area selection covers more than 5 regions; narrow the scope');
   }
   return Array.from(roots.values());
 }
 
 export function validateSelections(blocks: SelectionBlock[]): void {
   if (blocks.length > 5 || blocks.reduce((sum, b) => sum + b.text.length, 0) > 6000)
-    throw new Error('最多选取 5 个区域、合计 6000 字符，请缩小范围');
+    throw new Error('Select at most 5 regions and 6000 characters in total; narrow the scope');
 }
 
 export const navigationTargets: Record<string, string> = {

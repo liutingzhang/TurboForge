@@ -20,15 +20,15 @@ class ModelInspector:
             raise FileNotFoundError(f"Input model does not exist: {candidate}")
         if metadata_only:
             if not candidate.is_dir():
-                raise ValueError("原始模型来源必须是目录，请选择包含 config.json 与分词器文件的原始 HF 模型目录，或填写原始仓库链接")
+                raise ValueError("The original model source must be a directory; select the original HF model directory containing config.json and tokenizer files, or enter the original repository link")
             if not (candidate / "config.json").is_file():
-                raise ValueError("所选原始模型目录缺少 config.json。GGUF 权重所在文件夹不一定是原始模型目录；请选择含配置与分词器文件的原始 HF 模型目录，或填写原始仓库链接")
+                raise ValueError("The selected original model directory lacks config.json. The folder holding GGUF weights is not necessarily the original model directory; select the original HF model directory with config and tokenizer files, or enter the original repository link")
             config = json.loads((candidate / "config.json").read_text(encoding="utf-8-sig"))
             if not isinstance(config, dict):
-                raise ValueError("config.json 必须是对象")
+                raise ValueError("config.json must be an object")
             tokenizer = [name for name in ("tokenizer.json", "tokenizer.model") if (candidate / name).is_file()]
             if not tokenizer:
-                raise ValueError("GGUF 导入需要原始 HF 目录中的 config.json 与 tokenizer.json/tokenizer.model")
+                raise ValueError("GGUF import needs config.json and tokenizer.json/tokenizer.model from the original HF directory")
             architectures = config.get("architectures", [])
             return ModelInspection(path=str(candidate), input_kind=InputKind.SAFETENSORS,
                                    architecture=architectures[0] if architectures else config.get("model_type", "unknown"),

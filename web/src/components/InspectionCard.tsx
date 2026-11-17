@@ -21,27 +21,27 @@ export default function InspectionCard({ inspection, loading, error, meta }: Pro
   const dflash2 = Boolean(spec.dflash2?.detected);
 
   return (
-    <Panel title="模型识别" icon={<ScanOutlined />}>
-      {error && <Notice tone="bad" title="无法识别输入">{error}</Notice>}
+    <Panel title="Model identification" icon={<ScanOutlined />}>
+      {error && <Notice tone="bad" title="Cannot identify the input">{error}</Notice>}
       {!error && loading && <Skeleton active paragraph={{ rows: 3 }} />}
       {!error && !loading && !inspection && (
         <EmptyHint icon={<ScanOutlined />}>
-          填写输入路径后自动识别架构、精度与 MTP / DFlash2 组件
+          After entering the input path, architecture, precision and MTP / DFlash2 components are identified automatically
         </EmptyHint>
       )}
       {!error && !loading && inspection && (
         <div className="fade">
           <div className="stat-grid">
-            <Stat label="架构" value={inspection.architecture} mono wide />
-            <Stat label="输入类型" value={kindLabel} />
-            <Stat label="权重精度" value={inspection.weight_precision} mono />
-            <Stat label="张量数" value={inspection.tensor_count} mono />
-            <Stat label="分片数" value={inspection.shard_count} mono />
-            <Stat label="权重体积" value={humanBytes(inspection.tensor_bytes)} mono />
+            <Stat label="Architecture" value={inspection.architecture} mono wide />
+            <Stat label="Input kind" value={kindLabel} />
+            <Stat label="Weight precision" value={inspection.weight_precision} mono />
+            <Stat label="Tensors" value={inspection.tensor_count} mono />
+            <Stat label="Shards" value={inspection.shard_count} mono />
+            <Stat label="Weight size" value={humanBytes(inspection.tensor_bytes)} mono />
             {inspection.element_count > 0 && (
-              <Stat label="元素数" value={inspection.element_count.toLocaleString()} mono />
+              <Stat label="Elements" value={inspection.element_count.toLocaleString()} mono />
             )}
-            {inspection.license && <Stat label="许可证" value={inspection.license} wide />}
+            {inspection.license && <Stat label="License" value={inspection.license} wide />}
           </div>
 
           <div className="chip-row">
@@ -50,9 +50,9 @@ export default function InspectionCard({ inspection, loading, error, meta }: Pro
                 {dtype} × {count}
               </Chip>
             ))}
-            <Chip tone={mtp ? 'ok' : 'default'}>MTP {mtp ? '已检测 · 自动随附' : '未检测'}</Chip>
+            <Chip tone={mtp ? 'ok' : 'default'}>MTP {mtp ? 'detected · carried automatically' : 'not detected'}</Chip>
             <Chip tone={dflash2 ? 'ok' : 'default'}>
-              DFlash2 {dflash2 ? '已检测 · 自动随附' : '未检测'}
+              DFlash2 {dflash2 ? 'detected · carried automatically' : 'not detected'}
             </Chip>
           </div>
 

@@ -9,7 +9,7 @@ from turboforge.domain import InputKind
 def test_missing_input_has_one_actionable_reason():
     with tempfile.TemporaryDirectory() as root:
         result = precheck(str(Path(root) / "missing"))
-    assert not result["ready"] and "重新选择" in result["message"]
+    assert not result["ready"] and "reselect the model folder" in result["message"]
 
 
 def test_gguf_without_origin_does_not_offer_weight_editing():
@@ -21,7 +21,7 @@ def test_gguf_without_origin_does_not_offer_weight_editing():
             result = precheck(str(path))
     assert not result["ready"]
     assert result["action"] == "provide_original"
-    assert "原始模型" in result["message"]
+    assert "original model's config" in result["message"]
 
 
 def test_valid_hf_can_advance_without_installing_dependencies():

@@ -20,8 +20,8 @@ export default function Field({ label, required = false, tooltip, extra, childre
       if (!input.closest('[data-ai-ignore]') && !input.matches('[type="password"],[type="hidden"]')) input.setAttribute('data-ai-value', 'true');
     });
   });
-  const semanticIds: Record<string, string> = {'模型':'workflow.model','输入模型':'workflow.model','量化方案':'workflow.quantization',
-    '量化目标':'workflow.quantization','推测解码':'workflow.speculation'};
+  const semanticIds: Record<string, string> = {'Model':'workflow.model','Input model':'workflow.model','Quantization plan':'workflow.quantization',
+    'Quantization target':'workflow.quantization','Speculative decoding':'workflow.speculation'};
   return (
     <Form.Item
       className="field"
@@ -34,10 +34,10 @@ export default function Field({ label, required = false, tooltip, extra, childre
       label={
         <span className="field-label">
           {label}
-          <Button type="text" size="small" aria-label={`解释 ${label}`} className="ai-field-help" data-ai-ignore
-            onClick={event => {event.preventDefault(); event.stopPropagation(); window.dispatchEvent(new CustomEvent('turboforge:ask', {detail:{id:`field.${label}`,title:label,text:`${label}：${tooltip ?? '请解释这个字段的含义、影响和适用范围。'}`}}));}}>?</Button>
+          <Button type="text" size="small" aria-label={`Explain ${label}`} className="ai-field-help" data-ai-ignore
+            onClick={event => {event.preventDefault(); event.stopPropagation(); window.dispatchEvent(new CustomEvent('turboforge:ask', {detail:{id:`field.${label}`,title:label,text:`${label}: ${tooltip ?? 'Explain the meaning, impact and scope of this field.'}`}}));}}>?</Button>
           <span className={required ? 'req is-required' : 'req is-optional'}>
-            {required ? '必填' : '可选'}
+            {required ? 'Required' : 'Optional'}
           </span>
         </span>
       }

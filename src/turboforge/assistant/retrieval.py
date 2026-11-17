@@ -1,4 +1,4 @@
-"""Small deterministic Chinese/English help index, with no remote dependency."""
+"""Small deterministic English help index, with no remote dependency."""
 from __future__ import annotations
 
 from importlib.resources import files
@@ -9,15 +9,18 @@ from collections import Counter
 
 from .capabilities import capability_entries
 
-STOP_TERMS = {"什么", "怎么", "如何", "为什么", "为什", "么模", "可以", "是否", "是不", "不是", "需要", "能用", "还能", "用吗", "了吗", "时候", "一下", "样吗", "么样", "只有", "有一", "动吗", "能启", "么办"}
+STOP_TERMS = {"what", "how", "why", "can", "could", "would", "should", "does", "do", "did", "is", "are", "was",
+    "the", "a", "an", "to", "of", "for", "and", "or", "with", "need", "want", "please", "tell", "me", "my",
+    "i", "it", "this", "that", "when", "which", "there", "have", "has", "get", "make", "way", "able", "about"}
 
 
 def normalize(text: str) -> str:
     text = text.lower()
-    text = re.sub(r"(\d+)\s*[-_]?\s*(?:bits?|位)", r"\1bit", text)
-    text = text.replace("提速", "加速").replace("提升", "加速")
-    for value in ("变笨", "变傻", "胡言乱语", "答非所问", "能力下降"):
-        text = text.replace(value, "质量 损失")
+    text = re.sub(r"(\d+)\s*[-_]?\s*bits?", r"\1bit", text)
+    for value in ("speed up", "speed-up", "faster", "accelerate", "acceleration", "speed boost"):
+        text = text.replace(value, "speedup")
+    for value in ("dumber", "stupid", "gibberish", "nonsense", "incoherent", "quality drop", "degraded", "worse quality"):
+        text = text.replace(value, "quality loss")
     return text
 
 
@@ -54,7 +57,7 @@ class KnowledgeIndex:
             matched = query_terms & (title | body)
             if not matched:
                 continue
-            # IDF prevents generic Chinese fragments from outranking MTP/AWQ etc.
+            # IDF prevents generic fragments from outranking MTP/AWQ etc.
             score = 1000 * exact + sum(
                 math.log(1 + len(self.entries) / self.frequencies[t]) *
                 (3 if t in title else 1) * (4 if re.search(r"[a-z0-9]", t) else 1)

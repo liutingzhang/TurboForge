@@ -151,7 +151,7 @@ class ForgeConfig:
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "ForgeConfig":
         if not isinstance(value, dict):
-            raise ValueError("配置必须是 JSON 对象")
+            raise ValueError("Configuration must be a JSON object")
         # Keys starting with "_" are documentation for humans and never fields.
         payload = {k: v for k, v in value.items() if not k.startswith("_")}
         known = set(cls.__dataclass_fields__)
@@ -177,56 +177,56 @@ class ForgeConfig:
             raise ValueError(f"device must be cuda or cpu, got {self.device!r}")
         for name in ("input_path", "output_dir"):
             if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
-                raise ValueError(f"{name} 必须是非空路径")
+                raise ValueError(f"{name} must be a non-empty path")
         for name in ("runtime", "benchmark", "sources", "jailbreak_params", "quantization"):
             if not isinstance(getattr(self, name), dict):
-                raise ValueError(f"{name} 必须是对象")
+                raise ValueError(f"{name} must be an object")
         for name in ("perplexity_text", "perplexity_corpus", "baseline_artifact", "corpus"):
             if name in self.benchmark and (not isinstance(self.benchmark[name],str) or not self.benchmark[name].strip()):
-                raise ValueError(f"评测文件 {name} 必须是非空路径")
+                raise ValueError(f"Evaluation file {name} must be a non-empty path")
         for name in ("upstream_dir", "ninfer_dir"):
             value = getattr(self, name)
             if value is not None and (not isinstance(value, str) or not value.strip()):
-                raise ValueError(f"{name} 必须是非空路径")
+                raise ValueError(f"{name} must be a non-empty path")
         for name, value in self.sources.items():
             if not isinstance(value, str) or not value.strip():
-                raise ValueError(f"来源 {name} 必须是非空路径")
+                raise ValueError(f"Source {name} must be a non-empty path")
         for name in ("max_context", "max_concurrency", "port"):
             if name in self.runtime:
                 value = self.runtime[name]
                 if type(value) is not int or value < 1 or (name == "port" and value > 65535):
-                    raise ValueError(f"{name} 必须是有效的正整数")
+                    raise ValueError(f"{name} must be a valid positive integer")
         if self.runtime.get("speculative", "auto") not in ("auto", "none", "mtp", "dflash2"):
-            raise ValueError("speculative 仅支持 auto、none、mtp、dflash2")
+            raise ValueError("speculative only supports auto, none, mtp, dflash2")
         for name in ("run_validation", "run_benchmark", "allow_approximate_requantization"):
             if type(getattr(self, name)) is not bool:
-                raise ValueError(f"{name} 必须是布尔值")
+                raise ValueError(f"{name} must be a boolean")
         if "auto_quality" in self.benchmark:
             if type(self.benchmark["auto_quality"]) is not bool:
-                raise ValueError("auto_quality 必须是布尔值")
+                raise ValueError("auto_quality must be a boolean")
             if self.benchmark["auto_quality"] and (not self.target.startswith("hf_") or self.target == "hf_packed_import" or not self.run_benchmark):
-                raise ValueError("自动质量对照仅支持开启实测的 HF 新量化；其他路线需提供同阶段对照与语料")
+                raise ValueError("Automatic quality comparison only supports new HF quantization with benchmarking enabled; other routes need a same-stage baseline and corpus")
             if self.benchmark["auto_quality"] and (self.benchmark.get("perplexity_text") or self.benchmark.get("perplexity_corpus")):
-                raise ValueError("自动评测集与手动评测语料只能选择一个")
+                raise ValueError("Choose either the automatic evaluation set or a manual evaluation corpus, not both")
         if "max_ppl_relative_increase" in self.benchmark:
             import math
             limit = self.benchmark["max_ppl_relative_increase"]
             if type(limit) not in (int, float) or not math.isfinite(limit) or limit < 0:
-                raise ValueError("质量阈值必须是非负有限数")
+                raise ValueError("The quality threshold must be a non-negative finite number")
             if not self.run_benchmark or (not self.target.startswith("hf_") and not self.benchmark.get("baseline_artifact")) or not (self.benchmark.get("auto_quality") or self.benchmark.get("perplexity_text") or self.benchmark.get("perplexity_corpus")):
-                raise ValueError("启用质量门禁需要开启实测，并提供同一处理阶段的基准产物和评测语料")
+                raise ValueError("Enabling the quality gate requires benchmarking plus a same-processing-stage baseline artifact and evaluation corpus")
         if self.benchmark.get("perplexity_text") and self.benchmark.get("perplexity_corpus"):
-            raise ValueError("困惑度文本与语料 manifest 只能选择一个")
+            raise ValueError("Choose either perplexity text or a corpus manifest, not both")
         for name in ("repetitions", "perplexity_context", "perplexity_stride"):
             if name in self.benchmark and (type(self.benchmark[name]) is not int or self.benchmark[name] < 1):
-                raise ValueError(f"{name} 必须是正整数")
+                raise ValueError(f"{name} must be a positive integer")
         if "perplexity_context" in self.benchmark and "perplexity_stride" in self.benchmark and self.benchmark["perplexity_stride"] >= self.benchmark["perplexity_context"]:
-            raise ValueError("PPL stride 必须小于 context")
+            raise ValueError("PPL stride must be smaller than context")
         for name in ("n_prompt", "n_gen"):
             if name in self.benchmark:
                 values = self.benchmark[name]
                 if not isinstance(values, (list, tuple)) or not values or any(type(v) is not int or v < 1 for v in values):
-                    raise ValueError(f"{name} 必须是非空正整数列表")
+                    raise ValueError(f"{name} must be a non-empty list of positive integers")
 
 
 @dataclass

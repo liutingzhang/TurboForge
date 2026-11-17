@@ -12,28 +12,28 @@ interface Props {
 }
 
 const STEP_TITLE: Record<string, string> = {
-  jailbreak: '越狱处理',
-  'quantize+compile': '量化 + 编译',
-  speculative: 'MTP/DFlash2 随附',
-  validate: '验证',
+  jailbreak: 'Abliteration',
+  'quantize+compile': 'Quantize + compile',
+  speculative: 'MTP/DFlash2 carried',
+  validate: 'Validate',
 };
 
 const STEP_STATUS: Record<string, { label: string; tone: 'ember' | 'bad' | 'default'; cls: string }> = {
-  planned: { label: '已规划', tone: 'ember', cls: 'is-planned' },
-  blocked: { label: '被阻止', tone: 'bad', cls: 'is-blocked' },
-  skipped: { label: '跳过', tone: 'default', cls: 'is-skipped' },
+  planned: { label: 'Planned', tone: 'ember', cls: 'is-planned' },
+  blocked: { label: 'Blocked', tone: 'bad', cls: 'is-blocked' },
+  skipped: { label: 'Skipped', tone: 'default', cls: 'is-skipped' },
 };
 
 function ResourceMeter({ label, est, avail }: { label: string; est: number | null; avail: number | null }) {
   if (est === null) {
-    return <Meter label={label} hint="未建模 · 不臆造数值" ratio={0} />;
+    return <Meter label={label} hint="Not modeled · no invented numbers" ratio={0} />;
   }
   const ratio = avail && avail > 0 ? est / avail : 0;
   const over = avail !== null && est > avail;
   return (
     <Meter
       label={label}
-      hint={`估算 ${humanBytes(est)} / 可用 ${humanBytes(avail)}`}
+      hint={`Estimated ${humanBytes(est)} / available ${humanBytes(avail)}`}
       ratio={ratio}
       over={over}
     />
@@ -51,24 +51,24 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
 
   return (
     <Panel
-      title="构建计划"
+      title="Build plan"
       icon={<NodeIndexOutlined />}
       extra={
-        plan && <Chip tone={plan.executable ? 'ok' : 'bad'}>{plan.executable ? '可执行' : '被阻止'}</Chip>
+        plan && <Chip tone={plan.executable ? 'ok' : 'bad'}>{plan.executable ? 'Executable' : 'Blocked'}</Chip>
       }
     >
-      {error && <Notice tone="bad" title="计划生成失败">{error}</Notice>}
+      {error && <Notice tone="bad" title="Plan generation failed">{error}</Notice>}
       {!error && loading && <Skeleton active paragraph={{ rows: 4 }} />}
       {!error && !loading && !plan && (
         <EmptyHint icon={<NodeIndexOutlined />}>
-          配置变更后自动生成计划：路线、兼容性、资源与风险一目了然
+          The plan regenerates after config changes: route, compatibility, resources and risks at a glance
         </EmptyHint>
       )}
       {!error && !loading && plan && (
         <div className="fade">
           <div className="facts">
-            <Fact label="后端配方" value={plan.backend ?? '（无）'} mono />
-            <Fact label="越狱处理器" value={plan.processor ?? 'none'} mono />
+            <Fact label="Backend recipe" value={plan.backend ?? '(none)'} mono />
+            <Fact label="Abliteration processor" value={plan.processor ?? 'none'} mono />
           </div>
 
           <div className="route">
@@ -91,15 +91,15 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
 
           {compileStep && (
             <>
-              <Subhead>转换目标</Subhead>
+              <Subhead>Conversion target</Subhead>
               <div className="facts">
-                <Fact label="目标" value={details.label} wide />
-                <Fact label="标称位宽" value={(details.nominal_bits ?? '由源决定') + ' bit'} mono />
-                <Fact label="典型 bpw" value={details.typical_bpw ?? '由源决定'} mono />
-                <Fact label="设备" value={details.device} mono />
-                <Fact label="组件" value={details.components ?? 'text'} mono />
+                <Fact label="Target" value={details.label} wide />
+                <Fact label="Nominal bits" value={(details.nominal_bits ?? 'Source-defined') + ' bit'} mono />
+                <Fact label="Typical bpw" value={details.typical_bpw ?? 'Source-defined'} mono />
+                <Fact label="Device" value={details.device} mono />
+                <Fact label="Components" value={details.components ?? 'text'} mono />
                 <Fact
-                  label="存储格式"
+                  label="Storage formats"
                   wide
                   value={
                     <span className="chip-row">
@@ -113,7 +113,7 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
                 />
                 {details.notes?.length > 0 && (
                   <Fact
-                    label="说明"
+                    label="Notes"
                     wide
                     value={
                       <ul className="diag-alts" style={{ marginTop: 0 }}>
@@ -130,39 +130,39 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
 
           {plan.serving && (
             <>
-              <Subhead>服务参数（自动 · 不改变产物）</Subhead>
+              <Subhead>Serving parameters (automatic · does not change the artifact)</Subhead>
               <div className="facts">
-                <Fact label="KV 精度" value={plan.serving.kv_dtype} mono />
+                <Fact label="KV precision" value={plan.serving.kv_dtype} mono />
                 <Fact
-                  label="投机解码"
+                  label="Speculative decoding"
                   value={
                     plan.serving.spec
                       ? `${plan.serving.spec} · draft ${plan.serving.draft_tokens}`
-                      : '无（未检测到组件）'
+                      : 'None (no component detected)'
                   }
                   mono
                 />
                 <Fact
-                  label="服务上下文"
+                  label="Serving context"
                   value={
                     plan.serving.context_ceiling
-                      ? `${plan.serving.max_context}（上限 ${plan.serving.context_ceiling}）`
+                      ? `${plan.serving.max_context} (ceiling ${plan.serving.context_ceiling})`
                       : plan.serving.max_context
                   }
                   mono
                 />
                 <Fact
-                  label="并发 / 端口"
+                  label="Concurrency / port"
                   value={`${plan.serving.max_concurrency} / ${plan.serving.port}`}
                   mono
                 />
                 <Fact
-                  label="嵌入 Q4"
+                  label="Embedding Q4"
                   wide
                   value={
                     plan.serving.embedding_q4
-                      ? '启用（原生 row-split Q8_G32 存储）'
-                      : '省略（此配方的嵌入不属于已确认的原生 Q8 行格式）'
+                      ? 'Enabled (native row-split Q8_G32 storage)'
+                      : 'Omitted (the embedding of this recipe is not a confirmed native Q8 row format)'
                   }
                 />
               </div>
@@ -174,7 +174,7 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
                   {
                     key: 'flags',
                     label: (
-                      <span className="muted">自动服务旗标（{plan.serving.launcher_flags.length}）</span>
+                      <span className="muted">Automatic serving flags ({plan.serving.launcher_flags.length})</span>
                     ),
                     children: (
                       <div className="console" style={{ maxHeight: 200 }}>
@@ -185,21 +185,21 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
                 ]}
               />
               <p className="muted" style={{ fontSize: 12, marginBottom: 8, lineHeight: 1.6 }}>
-                与启动器共享几何、缓存精度和推测组件；基准工具支持的旗标不同，完整实测命令见报告。上下文/并发/端口可在第三步调整；
-                缓存精度由几何决定；可在第三步关闭推测解码以减少额外开销。
+                Shares geometry, cache precision and speculative components with the launcher; the benchmark tool supports different flags — see the report for the full measured command. Context/concurrency/port can be adjusted in step 3; 
+                cache precision follows the geometry; speculative decoding can be turned off in step 3 to reduce extra overhead.
               </p>
             </>
           )}
 
           {r && (
-            <div data-ai-id="plan.resources" data-ai-title="资源预估（非实测）">
-              <Subhead>资源预估（非实测）</Subhead>
-              <ResourceMeter label="临时磁盘" est={r.temporary_disk_bytes} avail={r.available_disk_bytes} />
-              <ResourceMeter label="服务显存" est={r.peak_vram_bytes} avail={r.available_vram_bytes} />
-              <ResourceMeter label="峰值内存" est={r.peak_ram_bytes} avail={r.available_ram_bytes} />
+            <div data-ai-id="plan.resources" data-ai-title="Resource estimates (not measured)">
+              <Subhead>Resource estimates (not measured)</Subhead>
+              <ResourceMeter label="Temporary disk" est={r.temporary_disk_bytes} avail={r.available_disk_bytes} />
+              <ResourceMeter label="Serving VRAM" est={r.peak_vram_bytes} avail={r.available_vram_bytes} />
+              <ResourceMeter label="Peak RAM" est={r.peak_ram_bytes} avail={r.available_ram_bytes} />
               <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                输入 {humanBytes(r.input_bytes)}
-                {r.estimated_output_bytes !== null && ` · 预计产物 ${humanBytes(r.estimated_output_bytes)}`}
+                Input {humanBytes(r.input_bytes)}
+                {r.estimated_output_bytes !== null && ` · estimated artifact ${humanBytes(r.estimated_output_bytes)}`}
               </div>
               <Collapse
                 ghost
@@ -207,7 +207,7 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
                 items={[
                   {
                     key: 'assume',
-                    label: <span className="muted">估算假设（{r.assumptions.length}）</span>,
+                    label: <span className="muted">Estimate assumptions ({r.assumptions.length})</span>,
                     children: (
                       <ul className="diag-alts" style={{ marginTop: 0 }}>
                         {r.assumptions.map((a, i) => (
@@ -223,7 +223,7 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
 
           {diags.length > 0 && (
             <>
-              <Subhead>诊断与风险</Subhead>
+              <Subhead>Diagnostics and risks</Subhead>
               {diags.map((d, i) => (
                 <Diag key={d.code + '-' + i} d={d} />
               ))}
@@ -238,7 +238,7 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
               items={[
                 {
                   key: 'caps',
-                  label: <span className="muted">全部已验证目标（{capabilities.length}）</span>,
+                  label: <span className="muted">All verified targets ({capabilities.length})</span>,
                   children: (
                     <Table
                       size="small"
@@ -247,7 +247,7 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
                       dataSource={capabilities}
                       columns={[
                         {
-                          title: '配方',
+                          title: 'Recipe',
                           dataIndex: 'name',
                           render: (v: string) => <span className="mono">{v}</span>,
                         },
@@ -255,17 +255,17 @@ export default function PlanPreview({ plan, capabilities, loading, error }: Prop
                           title: 'bpw',
                           dataIndex: 'typical_bpw',
                           width: 70,
-                          render: (v: number | null) => v ?? '由源',
+                          render: (v: number | null) => v ?? 'From source',
                         },
                         {
-                          title: '可用',
+                          title: 'Available',
                           dataIndex: 'available',
                           width: 80,
                           render: (v: boolean) =>
-                            v ? <Chip tone="ok">可用</Chip> : <Chip tone="bad">不可用</Chip>,
+                            v ? <Chip tone="ok">Available</Chip> : <Chip tone="bad">Unavailable</Chip>,
                         },
                         {
-                          title: '原因 / 备注',
+                          title: 'Reason / notes',
                           dataIndex: 'unavailable_reason',
                           render: (v: string | null, row: BackendCapability) => (
                             <span className="muted">{v ?? row.notes[0] ?? '—'}</span>

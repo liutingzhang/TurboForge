@@ -183,7 +183,7 @@ class WorkflowPreflightTest(unittest.TestCase):
         self.assertIn('pause', body)
 
     def test_root_startup_batch_keeps_window_on_failure(self):
-        bat = Path(__file__).resolve().parents[1] / '启动 TurboForge.bat'
+        bat = Path(__file__).resolve().parents[1] / 'Start TurboForge.bat'
         body = bat.read_text(encoding='utf-8')
         self.assertIn('chcp 65001', body)
         self.assertIn('start_web.ps1', body)
