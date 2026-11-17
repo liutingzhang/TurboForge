@@ -29,15 +29,26 @@ def package(output: Path, *, replace: bool = False) -> Path:
     from turboforge.frontend import frontend_current
     if not frontend_current(ROOT/"web"):
         raise RuntimeError("The frontend lacks a valid content receipt; build the pages and run scripts/frontend_receipt.py first")
-    tools = local_tools()
-    if tools is None:
-        raise RuntimeError("No matching engine and source available to package; complete a local conversion acceptance first")
-    source, engine = tools
+    source_value = os.environ.get("TURBOFORGE_RELEASE_SOURCE")
+    engine_value = os.environ.get("TURBOFORGE_RELEASE_ENGINE")
+    if source_value and engine_value:
+        source, engine = Path(source_value), Path(engine_value)
+    else:
+        tools = local_tools()
+        if tools is None:
+            raise RuntimeError("No matching engine and source available to package; complete a local conversion acceptance first")
+        source, engine = tools
     version = subprocess.run([str(engine / "ninfer.exe"), "--version"], capture_output=True, text=True, check=True, env=child_environment()).stdout
     architectures = re.search(r",\s*([0-9a, -]+)\)", version)
-    if not architectures:
-        raise RuntimeError("Cannot confirm the engine build architecture; a release with compatibility claims cannot be produced")
-    capabilities = sorted({int(value.rstrip("a")) / 10 for value in re.findall(r"\d+a?", architectures[1])})
+    if architectures:
+        capabilities = sorted({int(value.rstrip("a")) / 10 for value in re.findall(r"\d+a?", architectures[1])})
+    else:
+        # Shared-runtime builds print a one-line version; BUILD-INFO records the same
+        # architecture list the archive was compiled for.
+        info = engine / "BUILD-INFO.json"
+        if not info.is_file():
+            raise RuntimeError("Cannot confirm the engine build architecture; a release with compatibility claims cannot be produced")
+        capabilities = sorted({int(value.rstrip("a")) / 10 for value in json.loads(info.read_text(encoding="utf-8"))["architectures"]})
     files = {}
     python_archive = prepare_python_runtime()
     files["runtime/python/"+python_archive.name] = python_archive

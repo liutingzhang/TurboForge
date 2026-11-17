@@ -28,7 +28,7 @@ The release is split into two ZIP files; both are required:
 
 Uninstall: delete the whole `TurboForge` folder. If you used the HF route, also delete `%LOCALAPPDATA%\NInferTurboForge`, which holds downloaded Python/HF environments. Models and build records live inside `TurboForge`, so deleting the folder is a full cleanup.
 
-The first run needs the internet and an NVIDIA driver that is already installed. You do not need Git, Node.js, Python, or the CUDA Toolkit beforehand. The two parts total about 3.5 GB and include source, the web page, Python 3.13.18, and a matched NInfer engine. They do not include models or personal keys. Checksums are in `SHA256SUMS.txt`; both parts are required.
+The first run needs the internet and an NVIDIA driver that is already installed. You do not need Git, Node.js, Python, or the CUDA Toolkit beforehand. The two parts total about 2.8 GB (1.2 GB + 1.6 GB) and include source, the web page, Python 3.13.18, and a matched NInfer engine. They do not include models or personal keys. Checksums are in `SHA256SUMS.txt`; both parts are required.
 
 Check the machine without converting:
 
