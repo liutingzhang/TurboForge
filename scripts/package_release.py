@@ -65,9 +65,15 @@ def package(output: Path, *, replace: bool = False) -> Path:
         path = ROOT / name
         if path.is_file():
             files[name] = path
+    # Shared-runtime engines load their kernels from backends/<cuda>/ beside the
+    # launcher, so the bundled layout must keep that relative structure.
+    for path in engine.rglob("*"):
+        if path.is_file() and path.suffix.lower() in (".exe", ".dll", ".json", ".txt"):
+            files["runtime/bin/" + path.relative_to(engine).as_posix()] = path
+    # Runtime redistributables resolved from the host (MSVC family) go beside them.
     for path in collect(engine).values():
         if path.is_file() and path.suffix.lower() in (".exe", ".dll", ".json", ".txt"):
-            files["runtime/bin/" + path.name] = path
+            files.setdefault("runtime/bin/" + path.name, path)
     for path in engine.iterdir():
         if path.is_file() and any(word in path.name.lower() for word in ("license", "eula", "notice")):
             files["runtime/licenses/" + path.name] = path
