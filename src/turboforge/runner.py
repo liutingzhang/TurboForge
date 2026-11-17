@@ -35,7 +35,7 @@ from .system import gpu_status
 # Defaults to the installed package; override with TURBOFORGE_NINFER_BIN to point
 # at a locally built engine (e.g. one carrying geometry ports the release lacks).
 _BUNDLED_ENGINE = Path(__file__).resolve().parents[2] / "runtime/bin"
-DEFAULT_NINFER_BIN = Path(os.environ.get("TURBOFORGE_NINFER_BIN", str(_BUNDLED_ENGINE) if _BUNDLED_ENGINE.is_dir() else r"D:\llm\ninfer"))
+DEFAULT_NINFER_BIN = Path(os.environ.get("TURBOFORGE_NINFER_BIN", str(_BUNDLED_ENGINE)))
 
 
 def _bat_path(value: str | Path) -> str:

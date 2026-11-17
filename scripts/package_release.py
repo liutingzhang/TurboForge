@@ -28,36 +28,52 @@ def prepare_python_runtime() -> Path:
 def package(output: Path, *, replace: bool = False) -> Path:
     from turboforge.frontend import frontend_current
     if not frontend_current(ROOT/"web"):
-        raise RuntimeError("前端缺少有效内容校验，请先构建页面并运行 scripts/frontend_receipt.py")
-    tools = local_tools()
-    if tools is None:
-        raise RuntimeError("没有可打包的匹配引擎与源码；请先完成本机转换验收")
-    source, engine = tools
+        raise RuntimeError("The frontend lacks a valid content receipt; build the pages and run scripts/frontend_receipt.py first")
+    source_value = os.environ.get("TURBOFORGE_RELEASE_SOURCE")
+    engine_value = os.environ.get("TURBOFORGE_RELEASE_ENGINE")
+    if source_value and engine_value:
+        source, engine = Path(source_value), Path(engine_value)
+    else:
+        tools = local_tools()
+        if tools is None:
+            raise RuntimeError("No matching engine and source available to package; complete a local conversion acceptance first")
+        source, engine = tools
     version = subprocess.run([str(engine / "ninfer.exe"), "--version"], capture_output=True, text=True, check=True, env=child_environment()).stdout
     architectures = re.search(r",\s*([0-9a, -]+)\)", version)
-    if not architectures:
-        raise RuntimeError("无法确认引擎编译架构，不能生成带兼容性声明的发布包")
-    capabilities = sorted({int(value.rstrip("a")) / 10 for value in re.findall(r"\d+a?", architectures[1])})
+    if architectures:
+        capabilities = sorted({int(value.rstrip("a")) / 10 for value in re.findall(r"\d+a?", architectures[1])})
+    else:
+        # Shared-runtime builds print a one-line version; BUILD-INFO records the same
+        # architecture list the archive was compiled for.
+        info = engine / "BUILD-INFO.json"
+        if not info.is_file():
+            raise RuntimeError("Cannot confirm the engine build architecture; a release with compatibility claims cannot be produced")
+        capabilities = sorted({int(value.rstrip("a")) / 10 for value in json.loads(info.read_text(encoding="utf-8"))["architectures"]})
     files = {}
     python_archive = prepare_python_runtime()
     files["runtime/python/"+python_archive.name] = python_archive
-    # Runtime needs the app, the built page, and the three knowledge sources the
-    # assistant compiler checks. Tests, developer docs, and CI stay out.
-    for directory in ("src", "scripts", "web/dist", "configs"):
+    # Runtime needs the app, the built page, its frontend sources, and the two
+    # launcher scripts. Tests, docs, configs, CI and release tooling stay out.
+    launcher_scripts = {"start_web.py", "start_web.ps1", "frontend_receipt.py"}
+    for directory in ("src", "scripts", "web/dist", "web/src", "web/public"):
         for path in (ROOT / directory).rglob("*"):
+            if directory == "scripts" and path.name not in launcher_scripts:
+                continue
             if path.is_file() and not private_path(path.relative_to(ROOT).as_posix()):
                 files[path.relative_to(ROOT).as_posix()] = path
-    for name in ("docs/AI_ASSISTANT_KNOWLEDGE.md", "docs/AI_ASSISTANT_DIAGNOSTICS.md", "docs/AI_ASSISTANT_FIELDS.md"):
-        path = ROOT / name
-        if path.is_file():
-            files[name] = path
     for name in ("启动 TurboForge.bat", "README.md", "README_EN.md", "pyproject.toml", "LICENSE", "NOTICE", ".env.example", "requirements-web.txt", "web/package.json", "web/package-lock.json", "web/index.html", "web/vite.config.ts", "web/tsconfig.json"):
         path = ROOT / name
         if path.is_file():
             files[name] = path
+    # Shared-runtime engines load their kernels from backends/<cuda>/ beside the
+    # launcher, so the bundled layout must keep that relative structure.
+    for path in engine.rglob("*"):
+        if path.is_file() and path.suffix.lower() in (".exe", ".dll", ".json", ".txt"):
+            files["runtime/bin/" + path.relative_to(engine).as_posix()] = path
+    # Runtime redistributables resolved from the host (MSVC family) go beside them.
     for path in collect(engine).values():
         if path.is_file() and path.suffix.lower() in (".exe", ".dll", ".json", ".txt"):
-            files["runtime/bin/" + path.name] = path
+            files.setdefault("runtime/bin/" + path.name, path)
     for path in engine.iterdir():
         if path.is_file() and any(word in path.name.lower() for word in ("license", "eula", "notice")):
             files["runtime/licenses/" + path.name] = path
@@ -77,21 +93,26 @@ def package(output: Path, *, replace: bool = False) -> Path:
         added = subprocess.run(["git", "-C", str(source), "ls-files", "--others", "--exclude-standard", "-z"], capture_output=True, check=True, env=child_environment()).stdout.decode().split("\0")
         paths += [source / name for name in added if name and Path(name).suffix.lower() in (".cu", ".cuh", ".c", ".cpp", ".h", ".hpp", ".cmake", ".py")]
     paths += list((source / "tools").rglob("*.py"))  # include the tested local converter port
+    blocked_parts = {"tests", "test", "docs", "examples", "example", "__pycache__"}
     for path in paths:
         relative = path.relative_to(source)
         name = relative.as_posix()
+        if any(part.lower() in blocked_parts for part in relative.parts):
+            continue
+        if relative.suffix.lower() in {".md", ".rst"}:
+            continue
         if path.is_file() and not private_path(name) and relative.name not in {"CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md"}:
             files["runtime/source/" + name] = path
     if "runtime/source/tools/convert/__main__.py" not in files:
-        raise RuntimeError("转换器不完整")
+        raise RuntimeError("The converter is incomplete")
     if not (ROOT / "web/dist/index.html").is_file():
-        raise RuntimeError("请先运行启动脚本自动构建页面，再打包")
+        raise RuntimeError("Run the launcher script to build the pages automatically before packaging")
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists() and not replace:
-        raise RuntimeError("发布包已存在，请指定新文件名，避免覆盖已有交付")
+        raise RuntimeError("The release package already exists; specify a new filename to avoid overwriting an existing delivery")
     if shutil.disk_usage(output.parent).free < sum(p.stat().st_size for p in files.values()) + 256 * 1024**2:
-        raise RuntimeError("发布包所在磁盘空间不足")
+        raise RuntimeError("Insufficient disk space for the release package")
     partial = output.with_suffix(output.suffix + ".part")
     checksums = {}
     project_checksums = {}
@@ -105,7 +126,7 @@ def package(output: Path, *, replace: bool = False) -> Path:
                 checksums[name[len("runtime/"):]] = checksum.hexdigest()
             project_checksums[name] = checksum.hexdigest()
             if name.endswith(".exe"):
-                print("已打包：" + name, flush=True)
+                print("Packaged: " + name, flush=True)
         revision = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], capture_output=True, text=True, env=child_environment()).stdout.strip() if (source / ".git").exists() else json.loads((source / ".turboforge-source.json").read_text())["revision"]
         marker = json.dumps({"revision": revision, "local_modifications_included": True})
         archive.writestr("TurboForge/runtime/source/.turboforge-source.json", marker)
@@ -117,13 +138,13 @@ def package(output: Path, *, replace: bool = False) -> Path:
         archive.writestr("TurboForge/release-files.json", json.dumps({"files":project_checksums},indent=2))
     with zipfile.ZipFile(partial) as archive:
         if archive.testzip():
-            raise RuntimeError("发布包 CRC 检查失败，未替换已有交付")
+            raise RuntimeError("Release package CRC check failed; the existing delivery was not replaced")
     os.replace(partial, output)
     checksum = hashlib.sha256()
     with output.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024*1024), b""): checksum.update(chunk)
     output.with_suffix(output.suffix+".sha256").write_text(checksum.hexdigest()+"  "+output.name+"\n",encoding="ascii")
-    print("发布包：" + str(output), flush=True)
+    print("Release package: " + str(output), flush=True)
     return output
 
 

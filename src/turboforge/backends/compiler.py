@@ -29,7 +29,7 @@ __all__ = [
 
 
 _BUNDLED_SOURCE = Path(__file__).resolve().parents[3] / "runtime/source"
-DEFAULT_UPSTREAM = _BUNDLED_SOURCE if _BUNDLED_SOURCE.is_dir() else Path(r"D:\llm\ninfer-upstream")
+DEFAULT_UPSTREAM = _BUNDLED_SOURCE
 
 
 @dataclass

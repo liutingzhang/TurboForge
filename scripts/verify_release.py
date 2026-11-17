@@ -13,12 +13,17 @@ from turboforge.distribution import private_path
 
 def verify(path: Path) -> dict:
     required = {"README.md", "README_EN.md", "LICENSE", "NOTICE",
-                "requirements-web.txt", "pyproject.toml", ".env.example", "启动 TurboForge.bat", "scripts/start_web.ps1",
+                "requirements-web.txt", "pyproject.toml", ".env.example", "启动 TurboForge.bat",
+                "scripts/start_web.py", "scripts/start_web.ps1",
                 "src/turboforge/data/python-runtime.json", "src/turboforge/data/ensure_python.ps1",
-                "web/package-lock.json", "web/dist/index.html", "web/dist/build-receipt.json",
-                "docs/AI_ASSISTANT_KNOWLEDGE.md", "runtime/bundle.json"}
-    forbidden_prefixes = ("tests/", "docs/ARCHITECTURE.md", ".github/", "runtime/source/CONTRIBUTING.md", "runtime/source/SECURITY.md", "runtime/source/CHANGELOG.md")
-    forbidden_names = {"CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "PROJECT_SUMMARY.md", ".gitignore", "web/README.md"}
+                "web/package-lock.json", "web/src/App.tsx", "web/dist/index.html", "web/dist/build-receipt.json",
+                "runtime/bundle.json"}
+    forbidden_prefixes = ("tests/", "docs/", "configs/", ".github/", "runtime/source/docs/", "runtime/source/tests/",
+                          "runtime/source/examples/", "runtime/source/CONTRIBUTING.md", "runtime/source/SECURITY.md",
+                          "runtime/source/CHANGELOG.md")
+    forbidden_names = {"CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "PROJECT_SUMMARY.md", ".gitignore", "web/README.md",
+                       "scripts/build_assistant_knowledge.py", "scripts/build_assistant_browser_fixture.mjs",
+                       "scripts/check_clean_start.py", "scripts/package_release.py", "scripts/verify_release.py"}
     exceptions = {".env.example", "runtime/source/.turboforge-source.json"}
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
@@ -29,6 +34,15 @@ def verify(path: Path) -> dict:
         leaked = sorted(name for name in relative if name in forbidden_names or name.startswith(forbidden_prefixes))
         assert not leaked, "Development files included: " + str(leaked)
         assert all(not private_path(name) or name in exceptions for name in relative), "Private files included"
+        markers = ("D:\\llm", "D:/llm", "D:\\xiangmu", "D:/xiangmu", "C:\\Users\\huazuo", "C:/Users/huazuo")
+        leaked_paths = []
+        for name in relative:
+            if name.startswith(("src/", "scripts/", "web/")) or "/" not in name:
+                if name.lower().endswith((".py", ".ps1", ".bat", ".md", ".txt", ".json", ".toml", ".tsx", ".ts", ".yml", ".yaml")):
+                    text = archive.read("TurboForge/" + name).decode("utf-8", "ignore")
+                    if any(marker in text for marker in markers):
+                        leaked_paths.append(name)
+        assert not leaked_paths, "Personal development paths included: " + str(sorted(leaked_paths))
         manifest = json.loads(archive.read("TurboForge/release-files.json"))["files"]
         assert set(manifest) == relative - {"release-files.json"}, "Incomplete release digest list"
         for name, expected in manifest.items():

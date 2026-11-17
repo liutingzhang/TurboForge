@@ -17,11 +17,12 @@
 
 ## 安装并打开
 
-1. 从 Releases 下载 Windows 整合包，完整解压到空间够的目录，例如 `D:\TurboForge`。不要在压缩包里直接运行。
-2. 双击 **`启动 TurboForge.bat`**，等浏览器打开。窗口不要关，关掉就会停服务。
-3. 网页打不开时，看窗口里打印的地址。默认是 `http://127.0.0.1:8090`，这个端口被占用会自动换一个。
+1. 从 Releases 下载两个分卷包 `TurboForge-Windows-x64-chinese-part1.zip` 和 `TurboForge-Windows-x64-chinese-part2.zip`，放在同一个文件夹。GitHub 单文件 2 GB 限制是分卷的原因。
+2. 两个包都解压到同一个上级目录，例如 `D:\`；Windows 询问时选择“合并”。解压后应得到 `D:\TurboForge`。不要在压缩包里直接运行。
+3. 打开 `TurboForge`，双击 **`启动 TurboForge.bat`**，等浏览器打开。窗口不要关，关掉就会停服务。
+4. 网页打不开时，看窗口里打印的地址。默认是 `http://127.0.0.1:8090`，这个端口被占用会自动换一个。
 
-首次需要联网，也需要已经装好的 NVIDIA 驱动。不用预先安装 Git、Node.js、Python 或 CUDA Toolkit。整合包约 3.2 GB，带源码、网页、Python 3.13.18 和匹配的 NInfer 引擎，不含模型和个人密钥。
+首次需要联网，也需要已经装好的 NVIDIA 驱动。不用预先安装 Git、Node.js、Python 或 CUDA Toolkit。两个分卷共约 2.8 GB（1.2 GB + 1.6 GB），带源码、网页、Python 3.13.18 和匹配的 NInfer 引擎，不含模型和个人密钥。校验值见 `SHA256SUMS.txt`，两个分卷缺一不可。
 
 只想检查环境、不做转换：
 

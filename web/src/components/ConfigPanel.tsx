@@ -644,7 +644,7 @@ export default function ConfigPanel({
                       >
                         <Input
                           data-ai-ignore value={config.benchmark.corpus ?? ''}
-                          placeholder="D:/llm/ninfer-upstream/bench/fixtures/bench_corpus.ids"
+                          placeholder="留空使用内置默认"
                           allowClear
                           onChange={(e) => setBenchmark('corpus', e.target.value)}
                         />
