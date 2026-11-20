@@ -107,6 +107,34 @@ class TestAbliterationProcessor(unittest.TestCase):
         record = json.loads((self.out / "abliteration.json").read_text())
         self.assertIn(key, record["modified_tensors"])
 
+    def test_nonunit_direction_is_normalized(self):
+        dfile = self.base / "direction.pt"
+        torch.save(torch.tensor([2.0, 0.0, 0.0, 0.0]), dfile)
+        self.proc.apply(_inspection(self.src), self.out, direction_file=str(dfile))
+        after = load_file(str(self.out / "model-00001-of-00002.safetensors"))
+        self.assertTrue(torch.allclose(after["model.layers.0.self_attn.o_proj.weight"][0], torch.zeros(4)))
+        record = json.loads((self.out / "abliteration.json").read_text(encoding="utf-8"))
+        self.assertAlmostEqual(record["direction_norm"], 1.0)
+
+    def test_invalid_direction_rejected_before_writing(self):
+        for vector in (torch.zeros(4), torch.tensor([float("nan"), 0, 0, 0]),
+                       torch.tensor([float("inf"), 0, 0, 0]), torch.ones(4, dtype=torch.complex64)):
+            with self.subTest(vector=vector):
+                dfile = self.base / "direction.pt"
+                torch.save(vector, dfile)
+                with self.assertRaises(ValueError):
+                    self.proc.apply(_inspection(self.src), self.out, direction_file=str(dfile))
+                self.assertFalse(self.out.exists())
+
+    def test_all_model_resources_are_copied(self):
+        from turboforge.domain import MODEL_RESOURCE_FILES
+        for name in MODEL_RESOURCE_FILES:
+            if not (self.src / name).exists():
+                (self.src / name).write_text("{}", encoding="utf-8")
+        weight_edit.copy_resources(self.src, self.out)
+        for name in MODEL_RESOURCE_FILES:
+            self.assertEqual((self.src / name).read_bytes(), (self.out / name).read_bytes())
+
     def test_apply_without_direction_raises(self):
         with self.assertRaises(RuntimeError):
             self.proc.apply(_inspection(self.src), self.out)

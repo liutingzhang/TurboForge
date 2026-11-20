@@ -14,6 +14,8 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
+from ..domain import MODEL_RESOURCE_FILES
+
 try:
     import torch
     from safetensors.torch import load_file, save_file
@@ -36,6 +38,17 @@ _RESOURCE_GLOBS = (
     "*.txt", "chat_template.jinja", "preprocessor_config.json",
     "*.safetensors.index.json",
 )
+
+
+def require_dependencies() -> None:
+    global torch, load_file, save_file
+    if torch is None or load_file is None:
+        try:
+            import torch as runtime_torch
+            from safetensors.torch import load_file as runtime_load, save_file as runtime_save
+        except ImportError as exc:
+            raise RuntimeError("abliteration requires torch and safetensors") from exc
+        torch, load_file, save_file = runtime_torch, runtime_load, runtime_save
 
 
 def model_shards(model_dir: Path) -> list[Path]:
@@ -63,7 +76,7 @@ def copy_resources(src: Path, dst: Path) -> None:
     """Copy non-weight model resources so the edited dir stays loadable."""
     dst.mkdir(parents=True, exist_ok=True)
     seen: set[Path] = set()
-    for pattern in _RESOURCE_GLOBS:
+    for pattern in (*MODEL_RESOURCE_FILES, *_RESOURCE_GLOBS):
         for path in src.glob(pattern):
             if path.is_file() and path not in seen:
                 shutil.copy2(path, dst / path.name)
@@ -99,11 +112,20 @@ def rewrite_shards(
 
 def refusal_direction(harmful_mean: torch.Tensor, harmless_mean: torch.Tensor) -> torch.Tensor:
     """Mean-activation difference, normalized to unit length (Arditi et al.)."""
-    direction = (harmful_mean - harmless_mean).to(torch.float32)
-    norm = direction.norm()
-    if norm == 0:
-        raise ValueError("harmful and harmless mean activations are identical; no direction")
-    return direction / norm
+    return normalize_direction(harmful_mean - harmless_mean)
+
+
+def normalize_direction(direction: torch.Tensor) -> torch.Tensor:
+    if not isinstance(direction, torch.Tensor) or direction.is_complex():
+        raise ValueError("refusal direction must be a real tensor")
+    direction = direction.detach().to(device="cpu", dtype=torch.float32).reshape(-1)
+    if not direction.numel() or not torch.isfinite(direction).all():
+        raise ValueError("refusal direction must be nonempty and finite")
+    scale = direction.abs().max()
+    if scale == 0:
+        raise ValueError("refusal direction must be nonzero")
+    direction = direction / scale
+    return direction / direction.norm()
 
 
 def orthogonalize_output(weight: torch.Tensor, direction: torch.Tensor) -> torch.Tensor:
@@ -131,6 +153,8 @@ def abliteration_transform(
     output_suffixes: tuple[str, ...] = DEFAULT_OUTPUT_SUFFIXES,
     embedding_suffixes: tuple[str, ...] = DEFAULT_EMBEDDING_SUFFIXES,
 ) -> Callable[[str, torch.Tensor], torch.Tensor]:
+    direction = normalize_direction(direction)
+
     def transform(name: str, tensor: torch.Tensor) -> torch.Tensor:
         if tensor.ndim != 2 or not tensor.is_floating_point():
             return tensor

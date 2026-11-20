@@ -2,6 +2,10 @@
 from pathlib import Path
 import json
 import re
+import io
+import tempfile
+import urllib.parse
+import urllib.request
 from .architecture import (
     DEEPSEEK_V41,
     FLASH_NEXT,
@@ -18,7 +22,7 @@ from .domain import InputKind
 from .inspector import ModelInspector
 from .adapters.safetensors import _contains_nvfp4
 from .model_sources import ModelResolver, reference_parts, normalize_reference
-from .preparation import check_config_support
+from .preparation import available_ninfer_recipes, check_config_support
 from .backends.registry import (
     RECIPES,
     geometry_admits,
@@ -180,7 +184,7 @@ def _target_pool(config: dict, route: str | None,
     hf = recipes_for_config(config) if route is None else []
     if quant_method(config) in ("awq", "gptq"):
         candidates = []
-    return candidates, hf
+    return available_ninfer_recipes(candidates), hf
 
 
 def _target_entry(recipe, cap: float | None, provided: tuple[str, ...]) -> dict:
@@ -255,6 +259,73 @@ def _remote_metadata(repository: str, info: dict) -> dict:
     return config
 
 
+_GGUF_HEADER_LIMIT = 16 * 1024 * 1024
+
+
+def _remote_gguf_inspection(repository: str, revision: str, filename: str):
+    """Read only a bounded GGUF header; validate resources in disposable temp."""
+    from .adapters.gguf import GGUFAdapter, _read_directory
+    from .gguf_standalone import can_prepare, prepare_resources, read_metadata
+    url = f"https://huggingface.co/{repository}/resolve/{revision}/{urllib.parse.quote(filename, safe='/')}"
+    request = urllib.request.Request(url, headers={
+        "User-Agent": "TurboForge/0.3", "Range": f"bytes=0-{_GGUF_HEADER_LIMIT - 1}",
+        "Accept-Encoding": "identity",
+    })
+    header = io.BytesIO()
+    with urllib.request.urlopen(request, timeout=45) as response:
+        extent = re.fullmatch(r"bytes 0-(\d+)/(\d+)", response.headers.get("Content-Range", ""))
+        if (response.status != 206 or not extent
+                or not 0 <= int(extent[1]) < _GGUF_HEADER_LIMIT
+                or int(extent[2]) <= int(extent[1])
+                or response.headers.get("Content-Encoding", "identity") != "identity"):
+            raise ValueError("服务器未提供可核实的 GGUF 有限范围读取；未下载模型权重")
+        end = int(extent[1]) + 1
+
+        class HeaderReader:
+            def read(self, size):
+                if size < 0 or header.tell() + size > min(end, _GGUF_HEADER_LIMIT):
+                    raise ValueError("GGUF 头部不完整或超过只读检查上限；不会继续下载权重")
+                data = response.read(size)
+                header.write(data)
+                return data
+
+        # Parsing stops at the end of the tensor directory, before the payload.
+        _read_directory(HeaderReader(), filename, keep_metadata=True)
+    with tempfile.TemporaryDirectory(prefix="turboforge-precheck-") as temporary:
+        root = Path(temporary)
+        path = root / "header.gguf"
+        path.write_bytes(header.getvalue())
+        metadata = read_metadata(path)
+        if (metadata.get("split.count", 1) != 1
+                or re.search(r"-\d{5}-of-\d{5}\.gguf$", filename)):
+            raise ValueError("远程分片 GGUF 的完整张量元数据尚未核实，请提供原始模型")
+        inspection = GGUFAdapter().inspect(path)
+        if not inspection.tensor_count:
+            raise ValueError("GGUF 头部没有模型张量，无法确认完整权重来源")
+        config = None
+        if can_prepare(path, inspection):
+            generated = prepare_resources(path, root)
+            config = ModelInspector().inspect(generated, metadata_only=True).config
+        return inspection, config
+
+
+def _standalone_result(config: dict, inspection, *, remote: bool = False) -> dict:
+    result = choices(config, route="gguf", provided=("gguf",),
+                     source_quantization=inspection.quantization)
+    if not result["targets"]:
+        return {"ready": False, "remote": remote, "action": "choose_original",
+                "message": "此 GGUF 的自包含资源已核实，但缺少已验证的 NInfer 适配器；请安装适配引擎，或改选原始高精度模型使用 HF 路线。"}
+    from .backends.registry import get_recipe, serving_context_ceiling
+    ceiling = serving_context_ceiling(get_recipe("qwen3_5_gguf_standalone"), config)
+    limit = f"当前适配引擎上下文上限为 {ceiling}。" if ceiling else "此几何没有已知的适配引擎上下文上限。"
+    message = ("已仅从远程 GGUF 头部核实自包含配置、分词器和聊天模板，无需原始模型目录；完整权重尚未下载或验证。"
+               if remote else "已从 GGUF 内嵌信息生成配置、分词器和聊天模板，无需原始模型目录。")
+    return {**result, "optional_sources": {}, "ready": True, "remote": remote,
+            "can_edit_weights": False,
+            **({"recommended_max_context": ceiling} if ceiling else {}),
+            "message": message + "权重将解码后重编码为 Q8_0，质量需另外验收；" + limit}
+
+
 def precheck(model: str, original_model: str | None = None) -> dict:
     model = normalize_reference(model)
     original_model = normalize_reference(original_model) if original_model else None
@@ -277,6 +348,21 @@ def precheck(model: str, original_model: str | None = None) -> dict:
                             "input_candidates":[{"name":name,"reference":f"https://huggingface.co/{repository}/resolve/{info['sha']}/{name}"} for name in ggufs]}
                 if filename and not any(item["rfilename"] == filename for item in info.get("siblings", [])):
                     raise ValueError("所选仓库文件不存在")
+                gguf_name = filename or ggufs[0]
+                if not gguf_name.endswith(".gguf"):
+                    raise ValueError("请选择仓库中的文本 GGUF 文件或完整原始模型仓库")
+                try:
+                    inspection, recovered = _remote_gguf_inspection(repository, info["sha"], gguf_name)
+                except (ValueError, OSError, RuntimeError) as exc:
+                    return {"ready": False, "remote": True, "action": "provide_original",
+                            "message": "无法核实远程 GGUF 元数据，请提供原始模型或改选本机完整 GGUF；" + str(exc)}
+                if recovered is not None:
+                    return _standalone_result(recovered, inspection, remote=True)
+                label = inspection.quantization.get("gguf_quant_label", "unknown")
+                if (inspection.architecture == "unknown" or label == "unknown"
+                        or (label.startswith("ftype_") and not inspection.quantization.get("ternary_pq2"))):
+                    return {"ready": False, "action": "provide_original",
+                            "message": "远程 GGUF 缺少可核实的架构或来源精度，请提供原始模型；不会按文件名猜测。"}
                 base = original_model
                 if not base:
                     card = info.get("cardData") or {}
@@ -288,10 +374,12 @@ def precheck(model: str, original_model: str | None = None) -> dict:
                     config = inspector.inspect(base,metadata_only=True).config if Path(base).exists() else _remote_config(base)
                 except (ValueError, OSError) as exc:
                     return {"ready":False,"message":str(exc),"action":"provide_original"}
-                route = "gguf"  # Actual ternary layout is confirmed from the downloaded header.
-                result = choices(config, route=route, provided=(route,))
+                route = "ternary" if inspection.quantization.get("ternary_pq2") else "gguf"
+                result = choices(config, inspection.speculative_components, route=route,
+                                 provided=(route,), source_quantization=inspection.quantization)
+                result["targets"] = [t for t in result["targets"] if t["value"] != "qwen3_5_gguf_standalone"]
                 if not result["targets"]: return {"ready":False,"message":"当前模型尺寸没有 GGUF 直接导入路线，请将待处理模型改为原始高精度模型目录或仓库链接重新检查。","action":"choose_original"}
-                return {"ready":True,"remote":True,"can_edit_weights":False,"message":"将核对 GGUF 实际存储格式，按来源精度导入。",**result}
+                return {"ready":True,"remote":True,"can_edit_weights":False,"message":"已核对 GGUF 头部与来源精度；完整权重尚未下载或验证。",**result}
             config = _remote_metadata(repository,info)
             if _unsupported(config):
                 result = choices(config)
@@ -315,13 +403,7 @@ def precheck(model: str, original_model: str | None = None) -> dict:
                 from .bootstrap import cache_root
                 generated = prepare_resources(path, cache_root())
                 config = inspector.inspect(generated, metadata_only=True).config
-                result = choices(config, route='gguf', provided=('gguf',), source_quantization=inspection.quantization)
-                from .backends.registry import get_recipe, serving_context_ceiling
-                ceiling = serving_context_ceiling(get_recipe("qwen3_5_gguf_standalone"), config)
-                limit = f"当前适配引擎上下文上限为 {ceiling}。" if ceiling else "此几何没有已知的适配引擎上下文上限。"
-                return {**result,"optional_sources":{},"ready":True,"can_edit_weights":False,
-                        **({"recommended_max_context":ceiling} if ceiling else {}),
-                        "message":"已从 GGUF 内嵌信息生成配置、分词器和聊天模板，无需原始模型目录。权重将解码后重编码为 Q8_0，质量需另外验收；" + limit}
+                return _standalone_result(config, inspection)
             base = original_model
             if not base and inspection.input_kind == InputKind.GGUF and (directory/"config.json").is_file() and any((directory/name).is_file() for name in ("tokenizer.json","tokenizer.model")):
                 base = str(directory)
@@ -334,6 +416,7 @@ def precheck(model: str, original_model: str | None = None) -> dict:
                 return {"ready":False,"message":str(exc),"action":"provide_original"}
             route = "quantized" if inspection.input_kind == InputKind.NVFP4 else "ternary" if inspection.quantization.get("ternary_pq2") else "gguf"
             result = choices(config,inspection.speculative_components,route=route,provided=(route,),source_quantization=inspection.quantization)
+            result["targets"] = [t for t in result["targets"] if t["value"] != "qwen3_5_gguf_standalone"]
             if not result["targets"]: return {"ready":False,"message":"配置已识别，但当前转换器没有此模型尺寸的 GGUF / NVFP4 直接导入路线。请将待处理模型改为原始高精度模型目录或仓库链接，重新检查可用量化方案。","action":"choose_original"}
             return {"ready":True,"can_edit_weights":False,"message":"已识别导入路线，来源位宽保持不变。",**result}
         if _unsupported(inspection.config):

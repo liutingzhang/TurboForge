@@ -107,6 +107,61 @@ def test_chat_body_limit_and_bad_types(app):
     assert client.post("/api/assistant/chat", headers=headers, json={"question": "hi", "include": {"recent_logs": "true"}}).status_code == 400
 
 
+def test_serving_null_returns_json_status_and_refuses_launch(app, tmp_path):
+    from turboforge.manifest import write_json_atomic
+    manager = app.extensions["turboforge_build_manager"]
+    job = "b" * 32
+    write_json_atomic(tmp_path / "manifest.json", {"status": "blocked", "plan": {"serving": None}})
+    manager._builds[job] = {"build_id": job, "finished": True, "status": "blocked", "output_dir": str(tmp_path)}
+    client = app.test_client()
+    response = client.get(f"/api/build/{job}/server")
+    assert response.status_code == 200 and response.json["status"] == "stopped"
+    rejected = client.post(f"/api/build/{job}/server", json={})
+    assert rejected.status_code == 400 and rejected.is_json
+
+
+def test_owned_evidence_survives_session_expiry_and_restart(app, tmp_path, monkeypatch):
+    from turboforge.api.builds import BuildManager
+    from turboforge.manifest import write_json_atomic
+    monkeypatch.setenv("TURBOFORGE_HOME", str(tmp_path))
+    client = app.test_client()
+    headers = handshake(client)
+    manager = app.extensions["turboforge_build_manager"]
+    sessions = app.extensions["turboforge_assistant_sessions"]
+    session = next(iter(sessions.sessions.values()))
+    job = "c" * 32
+    output = tmp_path / "builds" / "blocked"
+    write_json_atomic(output / "manifest.json", {"status": "blocked", "plan": {"serving": None},
+        "history": [{"status": "blocked", "detail": "missing dependency"}],
+        "plan_diagnostics": [{"code": "missing-tool", "message": "missing converter"}]})
+    manager._builds[job] = {"build_id": job, "finished": True, "status": "blocked", "output_dir": str(output),
+        "setup_log": ["preparation failed"], "error": "failure at D:/private/model; api_key=SECRET"}
+    manager.bind_assistant_owner(job, session.owner)
+    session.touched -= 1801
+    headers = handshake(client)
+    response = client.post("/api/assistant/context/preview", headers=headers, json={"question": "why failed", "build_id": job})
+    assert response.status_code == 200
+    evidence = response.json["evidence"]["business"]
+    assert evidence["blocking_diagnostics"][0]["code"] == "missing-tool"
+    assert evidence["history"][-1]["detail"] == "missing dependency"
+    assert "private" not in response.text and "SECRET" not in response.text
+    owner_cookie = client.get_cookie("turboforge_build_owner", path="/api")
+    assert owner_cookie
+    session = next(iter(sessions.sessions.values()))
+    restarted = BuildManager()
+    assert restarted.assistant_owned(job, session.owner)
+    assert not restarted.assistant_owned(job, "x" * 43)
+    other = app.test_client()
+    other_headers = handshake(other)
+    assert other.post("/api/assistant/context/preview", headers=other_headers,
+        json={"question": "why", "build_id": job}).status_code == 403
+    sessions.sessions.clear()
+    manager._builds.clear()
+    headers = handshake(client)
+    assert client.post("/api/assistant/context/preview", headers=headers,
+        json={"question": "why", "build_id": job}).status_code == 200
+
+
 def test_foreign_build_cannot_supply_evidence(app):
     client = app.test_client()
     headers = handshake(client)

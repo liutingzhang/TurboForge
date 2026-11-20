@@ -17,9 +17,15 @@ def source_digest(web: Path) -> str:
     return digest.hexdigest()
 
 
+def built_directory(web: Path) -> Path:
+    development = web / "dist"
+    return development if development.is_dir() else web.parent / "runtime/web"
+
+
 def frontend_current(web: Path) -> bool:
-    marker = web/"dist/build-receipt.json"
-    if not marker.is_file() or not (web/"dist/index.html").is_file():
+    directory = built_directory(web)
+    marker = directory / "build-receipt.json"
+    if not marker.is_file() or not (directory / "index.html").is_file():
         return False
     try:
         receipt = json.loads(marker.read_text(encoding="utf-8"))
@@ -29,7 +35,7 @@ def frontend_current(web: Path) -> bool:
         return False
     if receipt.get("source_sha256") != source_digest(web):
         return False
-    dist = (web/"dist").resolve()
+    dist = directory.resolve()
     for name, expected in receipt["files"].items():
         if not isinstance(name, str) or not isinstance(expected, str):
             return False

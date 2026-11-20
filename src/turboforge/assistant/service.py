@@ -47,7 +47,7 @@ class AssistantService:
             raise AssistantError("not_configured", "请先在设置中填写 Base URL、模型名称和 API Key")
         context_limit = config.context_tokens
         # An owned managed local server carries an authoritative context ceiling.
-        for build_id in session.builds:
+        for build_id in tuple(session.builds):
             record = self.manager.status(build_id) or {}
             profile = ((record.get("manifest") or {}).get("plan") or {}).get("serving") or {}
             port = profile.get("port")
@@ -59,8 +59,8 @@ class AssistantService:
 
     def prepare(self, session, body: dict):
         validate_chat(body)
-        config = self.effective_config(session)
         snapshot = business_snapshot(self.manager, session, body)
+        config = self.effective_config(session)
         secrets = (config.api_key, session.default.api_key)
         selection = [{key: redact(value, secrets) for key, value in item.items()} for item in body.get("selection", [])]
         question = redact(body["question"].strip(), secrets)

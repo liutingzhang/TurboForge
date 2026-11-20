@@ -162,6 +162,13 @@ class BuildRunner:
         components = step.details.get("components", recipe.components) if step else recipe.components
         requested = Path(config.output_dir).name or "model"
         artifact = output_dir / f"{requested}.ninfer"
+        prepared_sources = prepare_sources(model_dir, config.sources, output_dir / "intermediate/speculative-input")
+        embedded_mtp = plan.inspection.speculative_components.get("mtp", {}).get("source") == "base_checkpoint"
+        if (plan.inspection.weight_precision == "metadata_only" and embedded_mtp
+                and any(name in recipe.extra_sources for name in ("gguf", "ternary"))
+                and not prepared_sources.get("mtp")):
+            # A GGUF's own MTP does not prove retention of the original HF head.
+            raise ValueError("导入路线未将原目录内嵌 MTP 封装为独立来源，不能用导入权重自带的 MTP 冒充保留原头；已阻止转换")
         manifest.transition("converting", f"recipe {recipe.recipe}",
                             converter={"recipe": recipe.recipe,
                                        "components": components,
@@ -169,7 +176,7 @@ class BuildRunner:
                                        "log": "logs/convert.log"})
         result = self.compiler.run(
             recipe, model_dir, artifact,
-            sources={k:Path(v) for k,v in prepare_sources(model_dir,config.sources,output_dir/"intermediate/speculative-input").items()},
+            sources={k:Path(v) for k,v in prepared_sources.items()},
             components=components,
             name=requested,
             device=config.device,
@@ -322,9 +329,20 @@ class BuildRunner:
                 raise ValueError("对照缺少匹配的配置/分词器指纹，请用相同模型资料重新生成对照产物")
             if reference.get("config", {}).get("jailbreak_params", {}) != config.jailbreak_params:
                 raise ValueError("对照模型的越狱参数不同，不能作为纯量化质量对照")
-            imported = ("gguf", "ternary", "quantized", "engram", "ngram")
-            if {key:reference.get("config", {}).get("sources", {}).get(key) for key in imported} != {key:config.sources.get(key) for key in imported}:
+            if reference.get("config", {}).get("sources", {}) != config.sources:
                 raise ValueError("对照使用了不同的导入权重或附加表，不能认定为相同来源")
+            reference_sources = reference.get("additional_source_identity")
+            recorded_sources = manifest.data.get("additional_source_identity")
+            if (not isinstance(reference_sources, dict) or not isinstance(recorded_sources, dict)
+                    or set(reference_sources) != set(config.sources)
+                    or set(recorded_sources) != set(config.sources)):
+                raise ValueError("对照或当前构建缺少额外来源内容指纹，请重新生成对照产物；旧记录不能作为质量门禁证据")
+            from .manifest import source_content_identity
+            current_sources = {name: source_content_identity(Path(path)) for name, path in config.sources.items()}
+            if any(identity["type"] == "missing" for identity in current_sources.values()):
+                raise ValueError("额外来源不存在，无法核对内容指纹，质量门禁不能通过")
+            if current_sources != recorded_sources or current_sources != reference_sources:
+                raise ValueError("导入权重或附加来源的内容指纹不一致，不能作为相同来源的质量对照")
             return reference
         return None
 

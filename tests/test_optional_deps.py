@@ -39,6 +39,12 @@ assert "torch" in (abl.capability.unavailable_reason or "")
 assert heretic.capability.available is False
 assert "heretic" in (heretic.capability.unavailable_reason or "")
 assert PROCESSORS["none"].capability.available is True
+sys.meta_path.pop(0)
+if importlib.util.find_spec("torch") and importlib.util.find_spec("safetensors"):
+    assert abl.capability.available is True
+    weight_edit.require_dependencies()
+    assert weight_edit.torch is not None
+    assert weight_edit.load_file is not None
 print("OK")
 """
 

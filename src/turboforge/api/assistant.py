@@ -18,6 +18,7 @@ from ..assistant.service import AssistantService
 from ..assistant.sessions import SessionStore
 
 COOKIE = "turboforge_assistant"
+OWNER_COOKIE = "turboforge_build_owner"
 
 
 def loopback(value: str) -> bool:
@@ -51,10 +52,8 @@ def register_assistant(app, manager, root: Path | None = None):
 
     @blueprint.route("/storage", methods=["GET", "DELETE"])
     def storage():
-        from ..bootstrap import cache_root
-        from ..storage import inventory
         if request.method == "GET":
-            return jsonify(inventory(cache_root()))
+            return jsonify(manager.storage_inventory())
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or set(body) != {"ids"} or not isinstance(body["ids"], list):
             return jsonify({"error": "请选择需要删除的失败构建"}), 400
@@ -85,7 +84,7 @@ def register_assistant(app, manager, root: Path | None = None):
             if incoming_origin is not None and incoming_origin not in allowed:
                 return jsonify({"error": "助手请求来源不被允许", "code": "origin"}), 403
         try:
-            session = sessions.get(request.cookies.get(COOKIE), service.config_store.default if service else ConnectionConfig())
+            session = sessions.get(request.cookies.get(COOKIE), service.config_store.default if service else ConnectionConfig(), request.cookies.get(OWNER_COOKIE))
         except AssistantError as exc:
             if is_assistant:
                 return jsonify({"error": str(exc), "code": exc.code}), exc.status
@@ -106,8 +105,11 @@ def register_assistant(app, manager, root: Path | None = None):
             if request.path in ("/api/build", "/api/auto-build") and request.method == "POST" and response.status_code == 200:
                 body = response.get_json(silent=True) or {}
                 if isinstance(body.get("build_id"), str):
+                    manager.bind_assistant_owner(body["build_id"], session.owner)
                     with sessions.lock:
                         session.builds.add(body["build_id"])
+            if request.cookies.get(OWNER_COOKIE) != session.owner:
+                response.set_cookie(OWNER_COOKIE, session.owner, httponly=True, samesite="Strict", secure=request.is_secure, path="/api", max_age=31536000)
             if request.cookies.get(COOKIE) != session.id:
                 response.set_cookie(COOKIE, session.id, httponly=True, samesite="Strict", secure=request.is_secure, path="/api")
         if request.path.startswith("/api/assistant"):

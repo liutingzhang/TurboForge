@@ -223,11 +223,11 @@ class ForgePlanner:
         if processor.capability.requires_high_precision and inspection.weight_precision not in ("bf16", "fp16", "fp32"):
             diagnostics.append(Diagnostic("jailbreak-precision", "越狱需要原始 BF16/FP16/FP32 权重；当前输入不符合。", Severity.ERROR))
         if config.jailbreak == "abliteration":
-            from .jailbreak.processors import _TRANSFORMERS_AVAILABLE
+            from .jailbreak.processors import _transformers_available
             direction = config.jailbreak_params.get("direction_file")
             if direction and (not isinstance(direction, str) or not Path(direction).is_file()):
                 diagnostics.append(Diagnostic("direction-file-missing", "拒绝方向文件不存在，请重新选择 .npy/.pt 文件。", Severity.ERROR))
-            elif not direction and not _TRANSFORMERS_AVAILABLE:
+            elif not direction and not _transformers_available():
                 diagnostics.append(Diagnostic("calibration-unavailable", "自动标定需要 transformers；请安装后重启，或提供已有拒绝方向向量。", Severity.ERROR))
         blocked = any(item.severity == Severity.ERROR for item in found)
         capability = processor.capability

@@ -2,7 +2,7 @@
 
 When a new model comes out, running it on your own GPU — fast enough, with a long context — takes two steps: turn the weights into something this machine can run, then hand that file to the right inference engine. TurboForge does the first half. Dense artifacts go to NInfer; MoE goes to Basalt or Strata depending on the GPU.
 
-[简体中文](README.md) · [Apache-2.0](LICENSE) · [Third-party notices](NOTICE) · [Configuration template](.env.example)
+[简体中文](README.md) · [Apache-2.0](LICENSE) · [Third-party notices](NOTICE) · [Install guide](INSTALL_EN.md)
 
 **Windows 10/11 x64 + an NVIDIA GPU. Double-click, then in the browser: pick a model → inspect → choose quantization → convert → validate → start the API.**
 
@@ -17,16 +17,17 @@ A chat app opens a model someone else already prepared. TurboForge turns your ow
 
 ## Install and open
 
-1. Download the Windows bundle from Releases and extract it to a folder with free space, for example `D:\TurboForge`. Do not run it from inside the ZIP.
-2. Double-click **`启动 TurboForge.bat`** and wait for the browser. Leave the window open; closing it stops the service.
-3. If the page does not open, use the address printed in that window. The default is `http://127.0.0.1:8090`. If 8090 is taken, another port is chosen.
+1. From Releases, download **all** English parts `TurboForge-Windows-x64-english-part*.zip` plus `SHA256SUMS.txt` into one folder. Each GitHub release asset must be under 2 GiB, which is why the delivery is split; every part is an independent ZIP and all of them are required. The Chinese set uses `chinese-part*.zip` with `INSTALL_ZH.md`; do not mix languages or versions.
+2. Check each ZIP against `SHA256SUMS.txt`, then extract all parts into the same new empty folder, for example `D:\`, producing `D:\TurboForge`. Do not run it from inside the ZIP. Full steps: [INSTALL_EN.md](INSTALL_EN.md).
+3. Open `TurboForge` and double-click **`Start TurboForge.bat`**, then wait for the browser. Leave the window open; closing it stops the service.
+4. If the page does not open, use the address printed in that window. The default is `http://127.0.0.1:8090`. If 8090 is taken, another port is chosen.
 
-The first run needs the internet and an NVIDIA driver that is already installed. You do not need Git, Node.js, Python, or the CUDA Toolkit beforehand. The bundle is about 3.2 GB and includes source, the web page, Python 3.13.18, and a matched NInfer engine. It does not include models or personal keys.
+The first run needs the internet and an NVIDIA driver that is already installed. You do not need Git, Node.js, Python, or the CUDA Toolkit beforehand. The bundle includes source, the prebuilt web page, Python 3.13.18, and a matched NInfer engine — no models or personal keys. First launch still installs web dependencies online, and conversion routes download their own dependencies. Part sizes are listed on the Releases page and in `SHA256SUMS.txt`. The application UI is currently Chinese.
 
 Check the machine without converting:
 
 ```powershell
-.\"启动 TurboForge.bat" --check
+.\"Start TurboForge.bat" --check
 ```
 
 The report is `.turboforge/deployment.json`. Logs are in `.turboforge/logs/`.
@@ -41,7 +42,7 @@ python -m venv .venv
 ## Six steps to a local API
 
 1. **Pick a model**  
-   Enter a local folder, a GGUF file, or a Hugging Face `org/name`. Leave "original model source" empty for a full HF folder. A single-file Qwen3.5 dense Q8_0 GGUF with hidden size 1024 can be used as-is. Other GGUF files need the original model folder or repository.
+   Enter a local folder, a GGUF file, or a Hugging Face `org/name`. Leave "original model source" empty for a full HF folder. The standalone NInfer route for single-file Q8_0 GGUF needs an extra adapter that this release does not include; the inspection page says so explicitly. A full original HF model can use the integrated HF GPTQ route. Other GGUF files need the original model folder or repository.
 
 2. **Inspect**  
    The page reads architecture, size, shards, and quantization, plus the GPU name, compute capability, and VRAM. It continues when the combination is supported.
@@ -62,7 +63,7 @@ python -m venv .venv
 curl.exe http://127.0.0.1:18080/v1/models
 ```
 
-Use the port on the results page. The default comes from the first address in `TURBOFORGE_AI_ALLOWED_LOCAL_ORIGINS` in `.env`; the template uses `18080`. Port `8090` is the web page, not the model API.
+Use the port on the results page; the default model port is `18080`. With your own `.env`, the first address in `TURBOFORGE_AI_ALLOWED_LOCAL_ORIGINS` changes it. Port `8090` is the web page, not the model API.
 
 Example call:
 
@@ -82,7 +83,7 @@ curl.exe http://127.0.0.1:18080/v1/chat/completions `
 
 The page shows the repository link and the launch steps. The three file types are not drop-in replacements. Datacenter Blackwell (compute 10.0) uses Strata, not Basalt.
 
-The standalone Qwen3.5-0.8B GGUF path is limited to 1024 tokens; the page fills that in. For a longer context, use ninfer-fusion-kvmem's KV tiers. Set concurrency when you start the server, after checking VRAM.
+The standalone GGUF route (extra adapter required) is limited to 1024 tokens; the page fills that in. For a longer context, use ninfer-fusion-kvmem's KV tiers. Set concurrency when you start the server, after checking VRAM.
 
 ## While you use it
 
@@ -95,7 +96,7 @@ The standalone Qwen3.5-0.8B GGUF path is limited to 1024 tokens; the page fills 
 
 | What you see | What to do |
 | --- | --- |
-| The window closes at once | Read the error, then run `启动 TurboForge.bat --check` |
+| The window closes at once | Read the error, then run `Start TurboForge.bat --check` |
 | The page does not open | Use the address printed in the window, not a memorized 8090 |
 | The API does not answer | Use the port on the results page and open `/v1/models` first |
 | Disk is full | Delete failed builds in the page; finished models and originals stay |

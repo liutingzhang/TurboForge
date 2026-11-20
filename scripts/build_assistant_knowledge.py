@@ -17,6 +17,11 @@ TOPICS = dict(zip("ABCDEFGHIJKL", ("start", "input", "quantization", "resources"
     "speculation", "errors", "quality", "performance", "serving", "connection", "maintenance")))
 
 
+def source_sha256(path: Path) -> str:
+    """Hash UTF-8 text with universal newlines, independent of Git checkout EOLs."""
+    return hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+
+
 def compile_entries() -> list[dict]:
     source = ROOT / "docs/AI_ASSISTANT_KNOWLEDGE.md"
     diagnostics = ROOT / "docs/AI_ASSISTANT_DIAGNOSTICS.md"
@@ -35,7 +40,7 @@ def compile_entries() -> list[dict]:
             "product_version": re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M).group(1),
             "upstream_revision": PINNED_UPSTREAM_REVISION,
             "evidence_level": "code_documented", "source_refs": sorted(set(references)),
-            "source_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in sorted(set(references))},
+            "source_sha256": {name: source_sha256(ROOT / name) for name in sorted(set(references))},
             "related_ids": []})
 
     for entry in capability_entries():

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from ..assistant.config import child_environment
 import importlib.util
+from dataclasses import replace
 import json
 import shutil
 import subprocess
@@ -31,8 +32,18 @@ from ..domain import (
 )
 from . import weight_edit
 
-_TORCH_AVAILABLE = torch is not None
-_TRANSFORMERS_AVAILABLE = importlib.util.find_spec("transformers") is not None
+def _torch_available() -> bool:
+    global torch
+    if torch is None:
+        try:
+            torch = importlib.import_module("torch")
+        except ImportError:
+            return False
+    return True
+
+
+def _transformers_available() -> bool:
+    return importlib.util.find_spec("transformers") is not None
 
 
 def _heretic_available() -> bool:
@@ -93,7 +104,7 @@ class HereticProcessor(JailbreakProcessor):
     """
 
     name = "heretic"
-    capability = ProcessorCapability(
+    _capability = ProcessorCapability(
         name="heretic",
         supported_architectures=("*",),
         input_precisions=("bf16", "fp16", "fp32"),
@@ -106,12 +117,14 @@ class HereticProcessor(JailbreakProcessor):
         output_precision="unchanged dtype",
         can_quantize_afterwards=True,
         implementation="external p-e-w/heretic in a dedicated console; waits for saved weights",
-        available=_heretic_available(),
-        unavailable_reason=(
-            None if _heretic_available()
-            else "heretic is not installed (pip install -U heretic-llm); it needs torch+transformers"
-        ),
+        available=False,
     )
+
+    @property
+    def capability(self) -> ProcessorCapability:
+        available = _heretic_available()
+        return replace(self._capability, available=available, unavailable_reason=None if available else
+            "heretic is not installed (pip install -U heretic-llm); it needs torch+transformers")
 
     def check(self, inspection: ModelInspection) -> list[Diagnostic]:
         diagnostics: list[Diagnostic] = []
@@ -218,7 +231,7 @@ class AbliterationProcessor(JailbreakProcessor):
     """
 
     name = "abliteration"
-    capability = ProcessorCapability(
+    _capability = ProcessorCapability(
         name="abliteration",
         supported_architectures=("*",),
         input_precisions=("bf16", "fp16", "fp32"),
@@ -231,9 +244,14 @@ class AbliterationProcessor(JailbreakProcessor):
         output_precision="unchanged dtype",
         can_quantize_afterwards=True,
         implementation="refusal-direction orthogonalization (torch, shard-streamed)",
-        available=_TORCH_AVAILABLE,
-        unavailable_reason=None if _TORCH_AVAILABLE else "torch is not installed",
+        available=False,
     )
+
+    @property
+    def capability(self) -> ProcessorCapability:
+        available = _torch_available()
+        return replace(self._capability, available=available,
+            unavailable_reason=None if available else "torch is not installed")
 
     def check(self, inspection: ModelInspection) -> list[Diagnostic]:
         diagnostics: list[Diagnostic] = []
@@ -257,7 +275,7 @@ class AbliterationProcessor(JailbreakProcessor):
                 "abliteration-unavailable", self.capability.unavailable_reason or "unavailable",
                 Severity.ERROR,
             ))
-        elif not _TRANSFORMERS_AVAILABLE:
+        elif not _transformers_available():
             diagnostics.append(Diagnostic(
                 "abliteration-calibration-source",
                 "transformers is not installed, so activations cannot be collected here; "
@@ -273,8 +291,9 @@ class AbliterationProcessor(JailbreakProcessor):
             raise RuntimeError(self.capability.unavailable_reason)
         if inspection.input_kind != InputKind.SAFETENSORS:
             raise RuntimeError("abliteration requires a high-precision safetensors checkpoint")
+        weight_edit.require_dependencies()
         src = Path(inspection.path)
-        direction = self._resolve_direction(src, params)
+        direction = weight_edit.normalize_direction(self._resolve_direction(src, params))
         size = weight_edit.hidden_size(src)
         if direction.numel() != size:
             raise ValueError(
@@ -308,9 +327,12 @@ class AbliterationProcessor(JailbreakProcessor):
             path = Path(direction_file).expanduser()
             if path.suffix == ".npy":
                 import numpy as np
-                return torch.from_numpy(np.load(path)).to(torch.float32).reshape(-1)
-            return torch.load(path, map_location="cpu").to(torch.float32).reshape(-1)
-        if not _TRANSFORMERS_AVAILABLE:
+                return torch.from_numpy(np.load(path, allow_pickle=False))
+            value = torch.load(path, map_location="cpu", weights_only=True)
+            if not isinstance(value, torch.Tensor):
+                raise ValueError("refusal direction file must contain a tensor")
+            return value
+        if not _transformers_available():
             raise RuntimeError(
                 "no refusal direction available: supply jailbreak_params.direction_file or "
                 "install transformers to collect calibration activations"

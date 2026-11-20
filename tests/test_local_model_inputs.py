@@ -77,7 +77,9 @@ def test_hf_input_with_extra_original_is_rejected_during_check(tmp_path):
 
 def test_remote_gguf_and_local_source_have_same_validation(tmp_path):
     gguf_info = {"sha":"a" * 40, "siblings":[{"rfilename":"model.gguf"}]}
-    with patch("turboforge.precheck.cuda_package"), patch.object(ModelResolver, "info", return_value=gguf_info):
+    inspection = type("Inspection", (), {"architecture": "qwen35", "quantization": {"gguf_file_type": 15, "gguf_quant_label": "Q4_K_M"}})()
+    with patch("turboforge.precheck.cuda_package"), patch.object(ModelResolver, "info", return_value=gguf_info), \
+         patch("turboforge.precheck._remote_gguf_inspection", return_value=(inspection, None)):
         result = precheck("org/gguf", str(tmp_path))
     assert not result["ready"]
     assert result["action"] == "provide_original"

@@ -31,6 +31,54 @@ def test_knowledge_matches_every_code_and_all_faq():
     assert index.search("PPL 增幅怎么计算")[0]["id"] == "H02"
 
 
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+def test_knowledge_source_hash_is_newline_equivalent(tmp_path, newline):
+    import hashlib
+    from scripts.build_assistant_knowledge import source_sha256
+
+    source = tmp_path / "source.py"
+    text = '# 中文源码\nvalue = "unchanged"\n'
+    source.write_bytes(text.replace("\n", newline).encode("utf-8"))
+    expected = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    assert source_sha256(source) == expected
+    source.write_bytes(text.replace("unchanged", "changed").replace("\n", newline).encode("utf-8"))
+    assert source_sha256(source) != expected
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+def test_compiled_knowledge_is_identical_across_checkout_newlines(tmp_path, monkeypatch, newline):
+    from scripts import build_assistant_knowledge as builder
+
+    # A complete small input tree keeps this EOL regression independent of
+    # concurrently edited production diagnostics and the pending entries.json.
+    sources = {
+        "pyproject.toml": 'version = "0.3.0"\n',
+        "docs/AI_ASSISTANT_KNOWLEDGE.md": "".join(
+            f"| {letter}{number:02} | 问题 | 回答 |\n" for letter in builder.TOPICS for number in range(1, 11)),
+        "docs/AI_ASSISTANT_DIAGNOSTICS.md": "| fixture-error | 诊断 | 建议 |\n| runtime.fixture | 拟新增：说明 | 后续 |\n",
+        "docs/AI_ASSISTANT_FIELDS.md": "| field.model | 模型 | 模型目录 | 必填 | input |\n| state.server | 服务 | 状态 | 启动 |\n",
+        "src/turboforge/diagnostic.py": 'Diagnostic("fixture-error", "回归")\n',
+        "src/turboforge/api/meta.py": '_param("fixture", "模型", "string", help_="帮助")\n',
+        "src/turboforge/precheck.py": 'SOURCE_FIELDS = {"mtp": {"label": "MTP"}}\noptional["gguf"] = {"label": "GGUF"}\n',
+        "web/src/App.tsx": '<Field label="模型" />\n',
+        "web/src/components/ConfigPanel.tsx": '<Field label="模型" />\n',
+        "scripts/start_web.py": "# 启动脚本\n",
+    }
+    monkeypatch.setattr(builder, "ROOT", tmp_path)
+    monkeypatch.setattr(builder, "capability_entries", lambda: [{
+        "id": "capability.fixture", "title": "能力", "body": "帮助", "topic": "start", "aliases": [],
+        "source_refs": ["scripts/start_web.py", "web/src/App.tsx", "src/turboforge/diagnostic.py"],
+    }])
+    for name, text in sources.items():
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(text.encode("utf-8"))
+    expected = builder.compile_entries()
+    for name, text in sources.items():
+        (tmp_path / name).write_bytes(text.replace("\n", newline).encode("utf-8"))
+    assert builder.compile_entries() == expected
+
+
 @pytest.mark.parametrize("question,expected", [
     ("量化后MTP还能用吗", {"F03", "F04"}),
     ("GPTQ默认用什么后端", {"capability.hf_backend"}),

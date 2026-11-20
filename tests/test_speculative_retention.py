@@ -1,5 +1,6 @@
 """Header/CPU-only regressions: never run a model or repeat a GPU benchmark."""
 import json
+import os
 from pathlib import Path
 import struct
 
@@ -12,19 +13,61 @@ from turboforge.backends.registry import get_recipe
 from turboforge.planner import ForgePlanner
 
 
+def _converter_source() -> Path:
+    from turboforge.backends.compiler import DEFAULT_UPSTREAM
+
+    root = Path(os.environ.get("TURBOFORGE_NINFER_SRC") or DEFAULT_UPSTREAM)
+    if not (root / "tools/convert/__main__.py").is_file():
+        pytest.skip("optional converter checkout unavailable; set TURBOFORGE_NINFER_SRC or provide runtime/source")
+    return root
+
+
+@pytest.fixture
+def optional_converter(monkeypatch):
+    upstream = _converter_source()
+    monkeypatch.syspath_prepend(str(upstream))
+    return upstream
+
+
+def test_optional_converter_uses_configured_source(tmp_path, monkeypatch):
+    entrypoint = tmp_path / "tools/convert/__main__.py"
+    entrypoint.parent.mkdir(parents=True)
+    entrypoint.write_text("# fixture", encoding="utf-8")
+    monkeypatch.setenv("TURBOFORGE_NINFER_SRC", str(tmp_path))
+    assert _converter_source() == tmp_path
+
+
+def test_optional_converter_uses_existing_default_discovery(tmp_path, monkeypatch):
+    from turboforge.backends import compiler
+
+    entrypoint = tmp_path / "tools/convert/__main__.py"
+    entrypoint.parent.mkdir(parents=True)
+    entrypoint.write_text("# fixture", encoding="utf-8")
+    monkeypatch.delenv("TURBOFORGE_NINFER_SRC", raising=False)
+    monkeypatch.setattr(compiler, "DEFAULT_UPSTREAM", tmp_path)
+    assert _converter_source() == tmp_path
+
+
+def test_missing_or_incomplete_optional_converter_skips(tmp_path, monkeypatch):
+    monkeypatch.setenv("TURBOFORGE_NINFER_SRC", str(tmp_path))
+    with pytest.raises(pytest.skip.Exception, match="TURBOFORGE_NINFER_SRC"):
+        _converter_source()
+
+
 def base(root):
     root.mkdir(exist_ok=True)
     write_config(root,architectures=["Qwen3_5ForCausalLM"],model_type="qwen3_5_text",hidden_size=1024)
     write_safetensors(root/"model.safetensors",{"model.norm.weight":("BF16",[32])})
 
 
-def test_unindexed_mtp_is_detected_and_materialized_without_touching_input(tmp_path):
+@pytest.mark.parametrize("metadata_only", [False, True])
+def test_unindexed_mtp_is_detected_and_materialized_without_touching_input(tmp_path, metadata_only):
     base(tmp_path)
     write_safetensors(tmp_path/"head.safetensors",{"mtp.fc.weight":("BF16",[32,64])})
     index=tmp_path/"model.safetensors.index.json"
     index.write_text(json.dumps({"weight_map":{"model.norm.weight":"model.safetensors"}}),encoding="utf-8")
     before=index.read_bytes()
-    inspection=ModelInspector().inspect(tmp_path)
+    inspection=ModelInspector().inspect(tmp_path, metadata_only=metadata_only)
     assert inspection.speculative_components["mtp"]["detected"]
     assert len(inspection.files) == 2
     result=prepare_sources(tmp_path,{},tmp_path/"work")
@@ -32,9 +75,13 @@ def test_unindexed_mtp_is_detected_and_materialized_without_touching_input(tmp_p
     assert before == index.read_bytes()
 
 
-def test_wrapped_mtp_prefix_is_normalized_losslessly(tmp_path):
+@pytest.mark.parametrize("metadata_only", [False, True])
+def test_wrapped_mtp_prefix_is_normalized_losslessly(tmp_path, metadata_only):
     base(tmp_path)
     write_safetensors(tmp_path/"head.safetensors",{"model.mtp.fc.weight":("F16",[32,64])})
+    inspection = ModelInspector().inspect(tmp_path, metadata_only=metadata_only)
+    assert inspection.speculative_components["mtp"]["detected"]
+    assert not inspection.speculative_components["mtp"]["compatibility_verified"]
     result=prepare_sources(tmp_path,{},tmp_path/"work")
     assert "mtp.fc.weight" in tensors(Path(result["mtp"]))
     assert "model.mtp.fc.weight" in tensors(tmp_path)
@@ -51,6 +98,86 @@ def test_bundled_dflash2_is_added_to_plan_even_when_execution_disabled(tmp_path)
     components=ForgePlanner._effective_components(get_recipe("qwen3_5_gguf_q4_0"),inspection,{})
     assert "dflash2" in components.split(",")
     assert prepare_sources(tmp_path,{},tmp_path/"work")["dflash2"] == str(companion.resolve())
+
+
+@pytest.mark.parametrize("component", ["mtp", "dflash2"])
+@pytest.mark.parametrize("prefix", ["", "model.", "model.language_model."])
+def test_metadata_only_detects_embedded_head_prefixes(tmp_path, component, prefix):
+    base(tmp_path)
+    head = tmp_path / "extra.safetensors"
+    write_safetensors(head, {prefix + component + ".fc.weight": ("BF16", [2, 2])})
+    before = head.read_bytes()
+    inspection = ModelInspector().inspect(tmp_path, metadata_only=True)
+    detected = inspection.speculative_components[component]
+    assert detected["detected"] and not detected["compatibility_verified"]
+    assert detected["source"] == "base_checkpoint"
+    assert inspection.weight_precision == "metadata_only"
+    assert "extra.safetensors" in {item["path"] for item in inspection.files}
+    assert before == head.read_bytes()
+
+
+@pytest.mark.parametrize("component", ["mtp", "dflash2"])
+@pytest.mark.parametrize("location", ["", "components"])
+def test_metadata_only_detects_companion_without_base_weights(tmp_path, component, location):
+    write_config(tmp_path)
+    companion = tmp_path / location / component
+    companion.mkdir(parents=True)
+    write_config(companion, architectures=["DFlash2DraftModel"] if component == "dflash2" else ["Qwen3_5ForCausalLM"])
+    write_safetensors(companion / "model.safetensors", {
+        "fc.weight" if component == "dflash2" else "mtp.fc.weight": ("BF16", [2, 2]),
+    })
+    inspection = ModelInspector().inspect(tmp_path, metadata_only=True)
+    detected = inspection.speculative_components[component]
+    assert detected["source_path"] == str(companion.resolve())
+    assert detected["detected"] and not detected["compatibility_verified"]
+    assert companion.relative_to(tmp_path).as_posix() + "/model.safetensors" in {item["path"] for item in inspection.files}
+
+
+@pytest.mark.parametrize("component", ["mtp", "dflash2"])
+def test_metadata_only_refuses_conflicting_embedded_and_companion_heads(tmp_path, component):
+    base(tmp_path)
+    write_safetensors(tmp_path / "head.safetensors", {component + ".fc.weight": ("BF16", [2, 2])})
+    companion = tmp_path / component
+    companion.mkdir()
+    write_config(companion, architectures=["DFlash2DraftModel"] if component == "dflash2" else ["Qwen3_5ForCausalLM"])
+    write_safetensors(companion / "model.safetensors", {
+        "fc.weight" if component == "dflash2" else "mtp.fc.weight": ("BF16", [2, 2]),
+    })
+    with pytest.raises(ValueError, match="不能猜测覆盖"):
+        ModelInspector().inspect(tmp_path, metadata_only=True)
+
+
+@pytest.mark.parametrize("import_key", ["gguf", "ternary"])
+@pytest.mark.parametrize("component,bundled", [("mtp", False), ("mtp", True), ("dflash2", True)])
+def test_metadata_import_plans_retain_head_or_block_without_inventing_execution(tmp_path, import_key, component, bundled):
+    from turboforge.backends.compiler import UpstreamStatus
+    from turboforge.domain import ForgeConfig
+    from turboforge.runner import BuildRunner
+    source = tmp_path / "source"
+    source.mkdir()
+    write_config(source, architectures=["Qwen3_5ForCausalLM"], hidden_size=5120)
+    head_dir = source / component if bundled else source
+    if bundled:
+        head_dir.mkdir()
+        write_config(head_dir, architectures=["DFlash2DraftModel"] if component == "dflash2" else ["Qwen3_5ForCausalLM"])
+    write_safetensors(head_dir / "head.safetensors", {
+        "fc.weight" if component == "dflash2" else "mtp.fc.weight": ("BF16", [2, 2]),
+    })
+    imported = tmp_path / "weights.gguf"
+    write_gguf(imported)
+    config = ForgeConfig(str(source), str(tmp_path / "output"), device="cpu",
+                         runtime={"speculative": "none"}, sources={import_key: str(imported)})
+    upstream = UpstreamStatus(tmp_path, True, "test", True, True, True, cuda_available=False)
+    planner = ForgePlanner(upstream=upstream)
+    plan = planner.plan(config)
+    assert plan.inspection.speculative_components[component]["detected"]
+    if component == "mtp" and not bundled:
+        assert not plan.executable
+        assert "speculative-would-be-dropped" in {item.code for item in plan.diagnostics}
+    else:
+        assert plan.executable, plan.diagnostics
+        assert component in next(step for step in plan.steps if step.name == "quantize+compile").details["components"].split(",")
+    assert not BuildRunner(planner)._speculative_flags(plan)
 
 
 def test_embedded_dflash2_requires_explicit_config(tmp_path):
@@ -159,13 +286,10 @@ def test_hf_cannot_silently_disable_builtin_head(tmp_path):
     assert plan(config,inspection).executable
 
 
-def test_custom_quantizer_keeps_draft_heads_q8_and_control_projections_direct(monkeypatch):
+def test_custom_quantizer_keeps_draft_heads_q8_and_control_projections_direct(optional_converter):
     from types import SimpleNamespace
-    import torch
+    torch = pytest.importorskip("torch")
     pytest.importorskip("gguf")
-    upstream=Path("D:/llm/ninfer-upstream")
-    if not upstream.is_dir(): pytest.skip("optional pinned converter checkout unavailable")
-    monkeypatch.syspath_prepend(str(upstream))
     from tools.convert.sources.logical import LogicalSource
     from turboforge.backends.gguf_quantization import _configure
     source=LogicalSource((32,32),"fixture",lambda begin,end:torch.zeros(end-begin))
@@ -193,12 +317,10 @@ def test_q8_bridge_gets_dflash_control_override():
 
 
 @pytest.mark.parametrize("type_name",["Q4_0","Q5_0","Q8_0","MXFP4"])
-def test_ggml_codec_rejects_nonfinite_and_overflow_without_rejecting_signed_scales(monkeypatch,type_name):
-    import numpy as np
+def test_ggml_codec_rejects_nonfinite_and_overflow_without_rejecting_signed_scales(optional_converter,type_name):
+    np = pytest.importorskip("numpy")
+    pytest.importorskip("torch")
     pytest.importorskip("gguf")
-    upstream=Path("D:/llm/ninfer-upstream")
-    if not upstream.is_dir(): pytest.skip("optional pinned converter checkout unavailable")
-    monkeypatch.syspath_prepend(str(upstream))
     from gguf import GGMLQuantizationType
     from gguf.quants import dequantize
     from turboforge.backends.gguf_quantization import checked_quantize

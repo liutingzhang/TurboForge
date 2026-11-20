@@ -88,6 +88,7 @@
 |---|---|---|---|
 | `speculative-component-missing` | 显式请求了没有检测到的兼容组件 | 选 auto/关闭，或提供支持的匹配来源；不训练/伪造头 | `planner.py` |
 | `speculative-would-be-dropped` | 当前路线无法保留输入自带组件 | 更换能保留的路线；不能静默丢头完成 | `planner.py` |
+| `speculative-inspection-unverified` | 已有权重头部无法读取，不能确认是否包含 MTP/DFlash2 | 核对同一版本的完整分片并重新检查；不能假定没有推测头继续转换 | `inspector.py` |
 | `hf-native-runtime` | 输出走独立 HF 引擎，不是 NInfer | 使用 HF 启动流程；MTP/DFlash2 不执行，新路线未完成 GPU 实机验收 | `backends/hf_quantization.py` |
 | `hf-configuration` | HF 参数/来源/布局校验未通过 | 展示该次具体 message，再映射到第二部分对应类别，不只说“改成自动” | `backends/hf_quantization.py` |
 

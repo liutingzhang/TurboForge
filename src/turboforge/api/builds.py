@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from ..assistant.config import child_environment
 import json
+import hashlib
+import secrets
 import re
 import threading
 import shlex
@@ -24,7 +26,9 @@ from typing import Any
 from ..domain import ForgeConfig
 from ..local_endpoint import default_serving_port
 from ..runner import BuildRunner
-from ..manifest import read_json_atomic, write_json_atomic
+from ..manifest import read_json_atomic, utc_now, write_json_atomic
+
+_ACTIVE_MANIFEST = {"created", "planned", "jailbreaking", "jailbroken", "converting", "validating", "benchmarking"}
 
 
 class BuildManager:
@@ -42,10 +46,29 @@ class BuildManager:
     def clean_failed_outputs(self, identifiers: list[str]) -> dict:
         from ..bootstrap import cache_root
         from ..storage import remove_failed
+        self.recover_interrupted()
         with self._lock:
             if any(not b["finished"] for b in self._builds.values()) or any(p.poll() is None for p in self._servers.values()):
                 raise ValueError("请先等待转换完成并停止模型服务，再清理失败产物")
             return remove_failed(cache_root(), identifiers)
+
+    def storage_inventory(self) -> dict:
+        from ..bootstrap import cache_root
+        from ..storage import inventory
+        self.recover_interrupted()
+        return inventory(cache_root())
+
+    def recover_interrupted(self) -> None:
+        """Load jobs left by an earlier service so their manifests become terminal."""
+        from ..bootstrap import cache_root
+        jobs = cache_root() / "jobs"
+        if not jobs.is_dir():
+            return
+        for state in jobs.glob("*/state.json"):
+            with self._lock:
+                known = state.parent.name in self._builds
+            if not known:
+                self._record(state.parent.name)
 
     def start(self, config: ForgeConfig | None, *, model: str | None = None, options: dict | None = None) -> str:
         import uuid
@@ -88,6 +111,13 @@ class BuildManager:
                     record["error"] = f"{type(exc).__name__}: {exc}"
             finally:
                 with self._lock:
+                    output_dir, error = record["output_dir"], record["error"] or "转换进程结束但未写入最终状态"
+                if self._settle_manifest(output_dir, "failed", error):
+                    with self._lock:
+                        record["error"] = error
+                        if record["status"] != "crashed":
+                            record["status"] = "failed"
+                with self._lock:
                     record["finished"] = True
                 self._persist(record)
 
@@ -121,6 +151,11 @@ class BuildManager:
             with subprocess.Popen([str(python), "-m", "turboforge.auto_worker", str(request), str(result)],
                                   env=child_environment(environment), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                   text=True, encoding="utf-8", errors="replace") as process:
+                try:
+                    self._owned_job().attach(process.pid)
+                except OSError:
+                    process.kill()
+                    raise
                 for line in process.stdout:
                     if line.startswith("@@CONFIG@@"):
                         prepared = json.loads(line[len("@@CONFIG@@"):])
@@ -215,7 +250,7 @@ class BuildManager:
         if record is None:
             raise ValueError("unknown build id")
         manifest = self._read_manifest(record["output_dir"])
-        port = (manifest or {}).get("plan", {}).get("serving", {}).get("port") or default_serving_port()
+        port = (((manifest or {}).get("plan") or {}).get("serving") or {}).get("port") or default_serving_port()
         base_url = f"http://127.0.0.1:{port}/v1"
         status = "stopped"
         if process is not None:
@@ -259,11 +294,21 @@ class BuildManager:
             self._server_job.close()
             self._server_job = None
 
+    def bind_assistant_owner(self, build_id: str, owner: str) -> None:
+        with self._lock:
+            record = self._builds[build_id]
+            record["assistant_owner"] = hashlib.sha256(owner.encode("ascii")).hexdigest()
+        self._persist(record)
+
+    def assistant_owned(self, build_id: str, owner: str) -> bool:
+        record = self._record(build_id)
+        digest = (record or {}).get("assistant_owner")
+        return isinstance(digest, str) and secrets.compare_digest(digest, hashlib.sha256(owner.encode("ascii")).hexdigest())
+
     def _persist(self, record: dict) -> None:
         from ..bootstrap import cache_root
         with self._lock:
-            snapshot = dict(record)
-        write_json_atomic(cache_root()/"jobs"/record["build_id"]/"state.json", snapshot)
+            write_json_atomic(cache_root()/"jobs"/record["build_id"]/"state.json", dict(record))
 
     def _record(self, build_id: str) -> dict[str, Any] | None:
         with self._lock:
@@ -292,9 +337,34 @@ class BuildManager:
             record = {"build_id":build_id,"finished":True,"status":"crashed","output_dir":"","setup_log":[],"error":f"任务记录无法读取，请重新开始：{exc}"}
         if not record["finished"]:
             record.update(finished=True, status="interrupted", error="上次本机服务在任务结束前关闭。请查看日志，重新开始会复用下载缓存。")
+            self._settle_manifest(record["output_dir"], "interrupted", record["error"])
+            try:
+                write_json_atomic(state, record)
+            except OSError:
+                pass
         with self._lock:
             self._builds[build_id] = record
         return dict(record)
+
+    def _owned_job(self):
+        with self._lock:
+            if self._server_job is None:
+                from ..process_owner import ServerJob
+                self._server_job = ServerJob()
+            return self._server_job
+
+    def _settle_manifest(self, output_dir: str, status: str, detail: str) -> bool:
+        """Give a manifest left mid-pipeline a terminal status cleanup can act on."""
+        manifest = self._read_manifest(output_dir)
+        if not isinstance(manifest, dict) or manifest.get("status") not in _ACTIVE_MANIFEST:
+            return False
+        history = manifest.get("history") if isinstance(manifest.get("history"), list) else []
+        manifest.update(status=status, history=[*history, {"at": utc_now(), "status": status, "detail": detail}], updated_at=utc_now())
+        try:
+            write_json_atomic(Path(output_dir) / "manifest.json", manifest)
+        except OSError:
+            return False
+        return True
 
     def status(self, build_id: str) -> dict[str, Any] | None:
         record = self._record(build_id)

@@ -81,6 +81,26 @@ class WorkflowPreflightTest(unittest.TestCase):
         self.assertEqual(plan.inspection.weight_precision, 'metadata_only')
         self.assertGreater(plan.resources.temporary_disk_bytes, gguf.stat().st_size)
 
+    def test_missing_import_source_build_keeps_blocked_manifest(self):
+        config = self.config(sources={'gguf': str(self.root / 'absent.gguf')})
+        runner = BuildRunner(self.planner)
+        with patch.object(runner.compiler, 'run', side_effect=AssertionError('blocked build must not convert')):
+            manifest = runner.build(config)
+        self.assertEqual(manifest.data['status'], 'blocked')
+        self.assertEqual(manifest.data['additional_source_identity'], {'gguf': {'type': 'missing'}})
+        self.assertIn('source-missing', {d['code'] for d in manifest.data['plan_diagnostics']})
+
+    def test_unreadable_base_head_is_blocked_despite_valid_imported_weights(self):
+        (self.model / 'model.safetensors').write_bytes(b'incomplete checkpoint')
+        gguf = self.root / 'weights.gguf'
+        write_gguf(gguf)
+        config = self.config(sources={'gguf': str(gguf)})
+        runner = BuildRunner(self.planner)
+        with patch.object(runner.compiler, 'run', side_effect=AssertionError('unverified heads must not convert')):
+            manifest = runner.build(config)
+        self.assertEqual(manifest.data['status'], 'blocked')
+        self.assertIn('speculative-inspection-unverified', {d['code'] for d in manifest.data['plan_diagnostics']})
+
     def test_fp8_q6_ternary_and_gguf_embeddings_do_not_get_q4_flag(self):
         for name in ('qwen3_8_27b_nvfp4', 'qwen3_6_27b', 'bonsai2_27b_ternary', 'qwen3_8_27b_gguf', 'qwen3_8_27b_imatrix'):
             with self.subTest(recipe=name):
@@ -95,6 +115,9 @@ class WorkflowPreflightTest(unittest.TestCase):
         write_safetensors(self.model / 'model.safetensors', {'mtp.fc.weight': ('BF16', [8, 8])})
         plan = self.planner.plan(self.config(sources={'gguf': str(gguf)}))
         self.assertIsNone(plan.serving['spec'], 'HF MTP cannot invent a missing GGUF MTP block')
+        self.assertTrue(plan.inspection.speculative_components['mtp']['detected'])
+        self.assertFalse(plan.executable, 'A detected HF head cannot be silently discarded by a GGUF import')
+        self.assertIn('speculative-would-be-dropped', {d.code for d in plan.diagnostics})
 
     def test_pq2_is_detected_from_tensor_storage_not_filename(self):
         gguf = self.root / 'model.gguf'

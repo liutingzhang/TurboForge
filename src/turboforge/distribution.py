@@ -13,3 +13,11 @@ def private_path(name: str, *, allow_template: bool = False) -> bool:
         if lowered.endswith((".pem", ".key", ".log")):
             return True
     return False
+
+
+def release_path(name: str) -> bool:
+    parts = PurePosixPath(name.replace("\\", "/")).parts
+    excluded = {"dist", "build", "node_modules", "tests", "test", "docs", "examples",
+                "example", "reports", "profiles", "worktrees", "models", "jobs", "downloads"}
+    return (not private_path(name) and not any(part.lower() in excluded for part in parts)
+            and not name.lower().endswith((".pyc", ".pyo", ".map", ".gguf", ".ninfer", ".safetensors")))

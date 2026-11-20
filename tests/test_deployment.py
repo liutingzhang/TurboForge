@@ -72,6 +72,130 @@ class CompatibilityTest(unittest.TestCase):
         self.assertIn("gguf>=0.19,<1", install.call_args.args[0])
 
 
+def small_hf_config():
+    return {"architectures": ["Qwen3_5ForCausalLM"], "model_type": "qwen3_5_text",
+            "hidden_size": 1024, "max_position_embeddings": 32768}
+
+
+def test_missing_small_adapter_allows_valid_hf_fallback(tmp_path):
+    from turboforge.precheck import choices, precheck
+    from tests.helpers import write_config, write_safetensors
+    config = small_hf_config()
+    write_config(tmp_path, **config)
+    write_safetensors(tmp_path/"model.safetensors", {"weight": ("BF16", [2, 2])})
+    with patch("turboforge.bootstrap.local_tools", return_value=(tmp_path, tmp_path)), \
+         patch("turboforge.precheck.cuda_package"), patch("turboforge.precheck.detect_gpu", return_value=None):
+        check_config_support(config)
+        options = choices(config)
+        result = precheck(str(tmp_path))
+    assert result["ready"] and result["can_edit_weights"]
+    assert options["requires_explicit_target"]
+    assert {item["engine"] for item in options["targets"]} == {"gptqmodel"}
+    assert {item["value"] for item in options["targets"]} == {"hf_gptq_2", "hf_gptq_3", "hf_gptq_4", "hf_gptq_8"}
+
+
+def test_unusable_local_tools_do_not_block_valid_hf_metadata():
+    with patch("turboforge.bootstrap.local_tools", side_effect=RuntimeError("damaged bundle")):
+        check_config_support(small_hf_config())
+
+
+def test_present_adapter_preserves_ninfer_routes(tmp_path):
+    from turboforge.precheck import choices
+    adapter = tmp_path/"tools/convert/qwen3_5_gguf.py"
+    adapter.parent.mkdir(parents=True); adapter.touch()
+    with patch("turboforge.bootstrap.local_tools", return_value=(tmp_path, tmp_path)), \
+         patch("turboforge.precheck.detect_gpu", return_value=None):
+        check_config_support(small_hf_config())
+        result = choices(small_hf_config())
+    assert any(item["value"] == "qwen3_5_gguf" for item in result["targets"])
+    assert not result["requires_explicit_target"]
+
+
+def test_remote_auto_and_explicit_unavailable_ninfer_stop_before_weights(tmp_path):
+    import pytest
+    from turboforge.preparation import prepare
+    config = small_hf_config()
+    info = {"sha": "c"*40, "siblings": [{"rfilename": "config.json"}, {"rfilename": "model.safetensors", "size": 100000000000}]}
+    def metadata_only_download(url, destination, **kwargs):
+        assert url.endswith("/config.json"), "must not download weights"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(config), encoding="utf-8")
+    for target, reason in (("auto", "明确选择 HF"), ("qwen3_5_gguf", "指定 NInfer")):
+        with patch("turboforge.preparation.cache_root", return_value=tmp_path), \
+             patch("turboforge.preparation.cuda_package"), \
+             patch("turboforge.model_sources.ModelResolver.info", return_value=info), \
+             patch("turboforge.model_sources.download", side_effect=metadata_only_download) as download, \
+             patch("turboforge.bootstrap.local_tools", return_value=None), \
+             patch("turboforge.preparation.ensure_tools") as tools, \
+             patch("turboforge.preparation.ensure_dependencies") as deps:
+            with pytest.raises(ValueError, match=reason):
+                prepare("Org/Small", {"target": target}, lambda _: None)
+        assert download.call_count == 1
+        tools.assert_not_called(); deps.assert_not_called()
+
+
+def test_local_auto_cannot_reselect_missing_ninfer_adapter(tmp_path):
+    import pytest
+    from turboforge.preparation import prepare
+    from tests.helpers import write_config, write_safetensors
+    source = tmp_path/"model"; source.mkdir()
+    write_config(source, **small_hf_config())
+    write_safetensors(source/"model.safetensors", {"weight": ("BF16", [2, 2])})
+    original = (source/"config.json").read_bytes()
+    for target, reason in (("auto", "明确选择 HF"), ("qwen3_5_gguf", "指定 NInfer")):
+        with patch("turboforge.preparation.cache_root", return_value=tmp_path/"cache"), \
+             patch("turboforge.preparation.cuda_package"), \
+             patch("turboforge.planner.probe_upstream"), \
+             patch("turboforge.bootstrap.local_tools", return_value=None), \
+             patch("turboforge.model_sources.download", side_effect=AssertionError("no downloads")), \
+             patch("turboforge.preparation.ensure_tools") as tools, \
+             patch("turboforge.preparation.ensure_dependencies") as deps:
+            with pytest.raises(ValueError, match=reason):
+                prepare(str(source), {"target": target}, lambda _: None)
+        tools.assert_not_called(); deps.assert_not_called()
+    assert (source/"config.json").read_bytes() == original
+
+
+def test_explicit_hf_prepare_works_without_small_ninfer_adapter(tmp_path):
+    from turboforge.preparation import prepare
+    from tests.helpers import write_config, write_safetensors
+    source = tmp_path/"model"; source.mkdir()
+    write_config(source, **small_hf_config())
+    write_safetensors(source/"model.safetensors", {"weight": ("BF16", [2, 2])})
+    with patch("turboforge.preparation.cache_root", return_value=tmp_path/"cache"), \
+         patch("turboforge.preparation.cuda_package"), \
+         patch("turboforge.bootstrap.local_tools", return_value=None), \
+         patch("turboforge.model_sources.download", side_effect=AssertionError("no downloads")), \
+         patch("turboforge.preparation.ensure_tools") as tools, \
+         patch("turboforge.preparation.ensure_dependencies") as deps:
+        result = prepare(str(source), {"target": "hf_gptq_4"}, lambda _: None)
+    assert result.target == "hf_gptq_4" and result.device == "cuda"
+    assert result.upstream_dir is None and result.ninfer_dir is None
+    tools.assert_not_called(); deps.assert_not_called()
+
+
+def test_auto_prepare_pins_existing_policy_after_adapter_filter(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from turboforge.preparation import prepare
+    from tests.helpers import write_config, write_safetensors
+    source = tmp_path/"model"; source.mkdir()
+    write_config(source, architectures=["Qwen3_5ForCausalLM"], model_type="qwen3_5_text", hidden_size=5120)
+    write_safetensors(source/"model.safetensors", {"weight": ("BF16", [2, 2])})
+    # Keep all runtime/environment effects confined to test doubles and temp.
+    monkeypatch.setenv("TURBOFORGE_NINFER_SRC", str(tmp_path))
+    monkeypatch.setenv("TURBOFORGE_NINFER_BIN", str(tmp_path))
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: False)))
+    with patch("turboforge.preparation.cache_root", return_value=tmp_path/"cache"), \
+         patch("turboforge.preparation.cuda_package"), patch("turboforge.planner.probe_upstream"), \
+         patch("turboforge.bootstrap.local_tools", return_value=None), \
+         patch("turboforge.preparation.ensure_tools", return_value=(tmp_path, tmp_path)) as tools, \
+         patch("turboforge.preparation.ensure_dependencies") as deps:
+        result = prepare(str(source), {}, lambda _: None)
+    assert result.target == "qwen3_8_27b"
+    tools.assert_called_once_with(tmp_path/"cache", unittest.mock.ANY, small_model=False)
+    deps.assert_called_once()
+
+
 class RuntimeTest(unittest.TestCase):
     def test_non_pe_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:

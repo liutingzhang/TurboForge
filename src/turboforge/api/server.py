@@ -24,8 +24,8 @@ def _dist_dir() -> Path:
     override = os.environ.get("TURBOFORGE_WEB_DIST")
     if override:
         return Path(override)
-    # src/turboforge/api/server.py -> project root is parents[3]
-    return Path(__file__).resolve().parents[3] / "web" / "dist"
+    from ..frontend import built_directory
+    return built_directory(Path(__file__).resolve().parents[3] / "web")
 
 
 _BUILD_NOTICE = """<!doctype html>

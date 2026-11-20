@@ -10,7 +10,15 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import json
+import os
+from pathlib import Path
+import runpy
+import subprocess
+import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from turboforge import cli
 from turboforge.domain import ForgeConfig
@@ -99,6 +107,49 @@ class CliJailbreakParamTest(unittest.TestCase):
                         cli.main([command, "--help"])
                 self.assertEqual(ctx.exception.code, 0)
                 self.assertIn("--jailbreak-param", buf.getvalue())
+
+
+class ModuleEntrypointTest(unittest.TestCase):
+    def run_cli(self, *args):
+        from turboforge.assistant.config import child_environment
+
+        env = child_environment()
+        source = str(Path(__file__).resolve().parents[1] / "src")
+        env["PYTHONPATH"] = source + os.pathsep + env.get("PYTHONPATH", "")
+        env["PYTHONIOENCODING"] = "utf-8"
+        with tempfile.TemporaryDirectory() as directory:
+            return subprocess.run([sys.executable, "-m", "turboforge", *args],
+                cwd=directory, env=env, capture_output=True, text=True, encoding="utf-8", timeout=30)
+
+    def test_module_help_works_outside_repository(self):
+        for args in (("--help",), ("build", "--help"), ("plan", "--help"), ("webui", "--help")):
+            with self.subTest(args=args):
+                result = self.run_cli(*args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("usage: turboforge", result.stdout)
+
+    def test_module_dispatches_recipes_with_json_output(self):
+        result = self.run_cli("recipes", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual({item["recipe"] for item in data}, {recipe.recipe for recipe in cli.RECIPES})
+
+    def test_module_preserves_parser_error_exit_code(self):
+        result = self.run_cli("not-a-subcommand")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid choice", result.stderr)
+
+    def test_module_preserves_command_error_exit_code(self):
+        result = self.run_cli("inspect", "missing-model.safetensors", "--json")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("error:", result.stderr)
+
+    def test_module_propagates_cli_main_return_value(self):
+        with patch.object(cli, "main", return_value=7) as main:
+            with self.assertRaises(SystemExit) as caught:
+                runpy.run_module("turboforge", run_name="__main__")
+        self.assertEqual(caught.exception.code, 7)
+        main.assert_called_once_with()
 
 
 if __name__ == "__main__":

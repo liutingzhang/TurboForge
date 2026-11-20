@@ -70,3 +70,52 @@ def test_clean_gguf_can_use_explicit_remote_metadata_without_local_config():
     remote.assert_called_once_with("org/original")
     assert result["ready"]
     assert any(t["value"] == "qwen3_8_27b_gguf" for t in result["targets"])
+
+
+def test_remote_hf_metadata_falls_back_when_small_adapter_is_absent(tmp_path):
+    import json
+    from tests.test_deployment import small_hf_config
+    info = {"sha": "a"*40, "siblings": [{"rfilename": "config.json"}, {"rfilename": "model.safetensors", "size": 1000000000}]}
+    with patch("turboforge.precheck.cuda_package"), patch("turboforge.precheck.detect_gpu", return_value=None), \
+         patch("turboforge.precheck.ModelResolver.info", return_value=info), \
+         patch("turboforge.precheck.read_url", return_value=json.dumps(small_hf_config()).encode()) as metadata, \
+         patch("turboforge.bootstrap.local_tools", return_value=None), \
+         patch("turboforge.model_sources.download", side_effect=AssertionError("no model downloads")):
+        result = precheck("Org/Small")
+    assert result["ready"] and result["requires_explicit_target"]
+    assert all(item["engine"] == "gptqmodel" for item in result["targets"])
+    assert metadata.call_count == 1
+
+
+def test_remote_gguf_uses_actual_ternary_tensor_type_not_filename(tmp_path):
+    from tests.helpers import write_gguf
+    from tests.test_gguf_standalone import RangeResponse
+    path = tmp_path/"Q8.gguf"
+    write_gguf(path, architecture="qwen35", file_type=15, tensor_type=142)
+    response = RangeResponse(path.read_bytes())
+    info = {"sha": "a"*40, "siblings": [{"rfilename": "Q8.gguf"}], "cardData": {"base_model": "Org/Original"}}
+    config = {"architectures": ["Qwen3_5ForCausalLM"], "hidden_size": 5120}
+    with patch("turboforge.precheck.cuda_package"), patch("turboforge.precheck.detect_gpu", return_value=None), \
+         patch("turboforge.precheck.ModelResolver.info", return_value=info), \
+         patch("turboforge.precheck.urllib.request.urlopen", return_value=response), \
+         patch("turboforge.precheck._remote_config", return_value=config), \
+         patch("turboforge.bootstrap.local_tools", return_value=None):
+        result = precheck("Org/GGUF")
+    assert result["ready"], result
+    assert result["provided_sources"] == ["ternary"]
+    assert [item["value"] for item in result["targets"]] == ["bonsai2_27b_ternary"]
+
+
+def test_remote_standard_gguf_does_not_offer_gsq_for_unverified_expert_type(tmp_path):
+    from tests.helpers import write_gguf
+    from tests.test_gguf_standalone import RangeResponse
+    path = tmp_path/"GSQ-Q2.gguf"
+    write_gguf(path, architecture="qwen4exp", tensors={"blk.0.ffn_gate_exps.weight": [8, 8]}, tensor_type=12)
+    info = {"sha": "a"*40, "siblings": [{"rfilename": path.name}], "cardData": {"base_model": "Org/Original"}}
+    with patch("turboforge.precheck.cuda_package"), patch("turboforge.precheck.detect_gpu", return_value=None), \
+         patch("turboforge.precheck.ModelResolver.info", return_value=info), \
+         patch("turboforge.precheck.urllib.request.urlopen", return_value=RangeResponse(path.read_bytes())), \
+         patch("turboforge.precheck._remote_config", return_value={"architectures": ["Qwen4ExpForCausalLM"]}):
+        result = precheck("Org/GGUF")
+    assert result["ready"] and result["provided_sources"] == ["gguf"]
+    assert "qwen3_8_flash_next_gsq_q2" not in {item["value"] for item in result["targets"]}

@@ -24,6 +24,7 @@ class Session:
     id: str
     csrf: str
     default: ConnectionConfig
+    owner: str = field(default_factory=lambda: secrets.token_urlsafe(32))
     touched: float = field(default_factory=time.monotonic)
     override: ConnectionConfig | None = None
     builds: set[str] = field(default_factory=set)
@@ -42,7 +43,7 @@ class SessionStore:
         self.lock = RLock()
         self.sessions: dict[str, Session] = {}
 
-    def get(self, token: str | None, default: ConnectionConfig) -> Session:
+    def get(self, token: str | None, default: ConnectionConfig, owner: str | None = None) -> Session:
         with self.lock:
             now = time.monotonic()
             stale = [key for key, session in self.sessions.items() if now - session.touched > 1800 and not session.requests]
@@ -53,6 +54,8 @@ class SessionStore:
                 if len(self.sessions) >= 256:
                     raise AssistantError("session_limit", "本机助手会话已满，请稍后重试", 429)
                 session = Session(secrets.token_urlsafe(32), secrets.token_urlsafe(32), default)
+                if owner and re.fullmatch(r"[A-Za-z0-9_-]{43}", owner):
+                    session.owner = owner
                 self.sessions[session.id] = session
             if session.tested_config is not None and now - session.tested_config[2] > 300:
                 session.tested_config = None

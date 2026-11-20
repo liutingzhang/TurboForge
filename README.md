@@ -2,7 +2,7 @@
 
 新模型发布后，要在自己的显卡上跑起来、跑得动、上下文拉得长，先把权重变成这台机器能用的产物，再交给对应的推理框架。TurboForge 做前半段：识别、量化、验收。Dense 产物交给 NInfer；MoE 按显卡交给 Basalt 或 Strata。
 
-[English](README_EN.md) · [Apache-2.0](LICENSE) · [第三方许可](NOTICE) · [配置模板](.env.example)
+[English](README_EN.md) · [Apache-2.0](LICENSE) · [第三方许可](NOTICE) · [安装说明](INSTALL_ZH.md)
 
 **Windows 10/11 x64 + NVIDIA 显卡。双击启动，在网页里完成：选模型 → 检查 → 选量化 → 转换 → 验收 → 启动 API。**
 
@@ -17,12 +17,12 @@
 
 ## 安装并打开
 
-1. 从 Releases 下载两个分卷包 `TurboForge-Windows-x64-chinese-part1.zip` 和 `TurboForge-Windows-x64-chinese-part2.zip`，放在同一个文件夹。GitHub 单文件 2 GB 限制是分卷的原因。
-2. 两个包都解压到同一个上级目录，例如 `D:\`；Windows 询问时选择“合并”。解压后应得到 `D:\TurboForge`。不要在压缩包里直接运行。
+1. 从 Releases 下载中文套装的**全部**分卷 `TurboForge-Windows-x64-chinese-part*.zip` 和 `SHA256SUMS.txt`，放在同一个文件夹。GitHub 单附件必须小于 2 GiB，这是分卷的原因；每卷都是独立 ZIP，缺一不可。英文套装为 `english-part*.zip`，配 `INSTALL_EN.md` 和 `Start TurboForge.bat`，不要混用语言或版本。
+2. 按 `SHA256SUMS.txt` 核对每个 ZIP 的 SHA-256，然后把所有分卷解压到同一个新的空目录，例如 `D:\`，得到 `D:\TurboForge`。不要在压缩包里直接运行。详细步骤见 [INSTALL_ZH.md](INSTALL_ZH.md)。
 3. 打开 `TurboForge`，双击 **`启动 TurboForge.bat`**，等浏览器打开。窗口不要关，关掉就会停服务。
 4. 网页打不开时，看窗口里打印的地址。默认是 `http://127.0.0.1:8090`，这个端口被占用会自动换一个。
 
-首次需要联网，也需要已经装好的 NVIDIA 驱动。不用预先安装 Git、Node.js、Python 或 CUDA Toolkit。两个分卷共约 2.8 GB（1.2 GB + 1.6 GB），带源码、网页、Python 3.13.18 和匹配的 NInfer 引擎，不含模型和个人密钥。校验值见 `SHA256SUMS.txt`，两个分卷缺一不可。
+首次需要联网，也需要已经装好的 NVIDIA 驱动。不用预先安装 Git、Node.js、Python 或 CUDA Toolkit。包内带源码、预构建网页、Python 3.13.18 和匹配的 NInfer 引擎，不含模型和个人密钥；首次启动仍会联网安装 Web 依赖，转换路线的依赖另行下载。各分卷大小以 Releases 页面和 `SHA256SUMS.txt` 为准。
 
 只想检查环境、不做转换：
 
@@ -42,7 +42,7 @@ python -m venv .venv
 ## 使用：六步到本机 API
 
 1. **选模型**  
-   填本机目录、具体 GGUF 文件，或 Hugging Face 的 `组织/模型名`。完整 HF 目录留空「原始模型来源」。Qwen3.5 dense、hidden size 1024 的单文件 Q8_0 GGUF 可直接用；其他 GGUF 需要配上原始模型目录或仓库。
+   填本机目录、具体 GGUF 文件，或 Hugging Face 的 `组织/模型名`。完整 HF 目录留空「原始模型来源」。单文件 Q8_0 GGUF 的独立 NInfer 路线需要额外适配器，本发布包未包含，检查页会明确提示；完整原始 HF 模型可选已接入的 HF GPTQ。其他 GGUF 需要配上原始模型目录或仓库。
 
 2. **检查**  
    页面读取架构、大小、分片和量化方式，同时看显卡型号、计算能力和显存。当前组合可用才会继续。
@@ -63,7 +63,7 @@ python -m venv .venv
 curl.exe http://127.0.0.1:18080/v1/models
 ```
 
-端口以结果页为准。默认模型端口来自 `.env` 里 `TURBOFORGE_AI_ALLOWED_LOCAL_ORIGINS` 的第一个地址，模板是 `18080`。网页端口 `8090` 和模型端口不是同一个。
+端口以结果页为准，默认模型端口是 `18080`；自建 `.env` 时可用 `TURBOFORGE_AI_ALLOWED_LOCAL_ORIGINS` 的第一个地址修改。网页端口 `8090` 和模型端口不是同一个。
 
 调用示例：
 
@@ -83,7 +83,7 @@ curl.exe http://127.0.0.1:18080/v1/chat/completions `
 
 页面会给出仓库链接和启动步骤。三种文件不能互相直接替换。数据中心 Blackwell（计算能力 10.0）用 Strata，不用 Basalt。
 
-Qwen3.5-0.8B 这条独立 GGUF 路线的上下文上限是 1024 token，页面会自动填上。更长的上下文用 ninfer-fusion-kvmem 的 KV 分层。并发在启动服务时设置，先看显存够不够。
+独立 GGUF 路线（需额外适配器）的上下文上限是 1024 token，页面会自动填上。更长的上下文用 ninfer-fusion-kvmem 的 KV 分层。并发在启动服务时设置，先看显存够不够。
 
 ## 使用时注意
 

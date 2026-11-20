@@ -71,6 +71,22 @@ def file_sha256(path: Path, chunk_size: int = 8 * 1024 * 1024) -> str:
     return digest.hexdigest()
 
 
+def source_content_identity(path: Path) -> dict[str, Any]:
+    """Record missing inputs without preventing creation of a blocked manifest."""
+    path = path.expanduser().resolve()
+    if path.is_file():
+        return {"type": "file", "sha256": file_sha256(path)}
+    if path.is_dir():
+        return {
+            "type": "directory",
+            "files": {
+                item.relative_to(path).as_posix(): file_sha256(item)
+                for item in sorted(path.rglob("*")) if item.is_file()
+            },
+        }
+    return {"type": "missing"}
+
+
 class BuildManifest:
     def __init__(self, output_dir: Path, build_id: str | None = None) -> None:
         self.output_dir = output_dir
@@ -112,6 +128,9 @@ class BuildManifest:
                 "configuration": inspection.config,
                 "resources": {name:file_sha256(source / name) for name in MODEL_RESOURCE_FILES
                               if source.is_dir() and (source/name).is_file()},
+            },
+            "additional_source_identity": {
+                name: source_content_identity(Path(path)) for name, path in config.sources.items()
             },
             "source_files": [
                 {

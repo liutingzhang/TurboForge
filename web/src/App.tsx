@@ -470,7 +470,7 @@ export default function App() {
                   {checked.gpu && <Chip mono>{checked.gpu.generation} · {Math.round(checked.gpu.total_bytes / 1024 ** 3)} GB</Chip>}
                   {checked.gpu && <Chip>{checked.scheme_order === 'native-format' ? '本卡原生格式已排到前面' : '本卡无原生低比特格式，按位宽排序'}</Chip>}
                 </div>}
-                {checked.runtime_engine && <Notice tone={checked.runtime_engine.compat_check ? 'warn' : 'info'} title={`后续推理建议 · ${checked.runtime_engine.label}`}>
+                {!hfSelected && !!config.target && checked.runtime_engine && <Notice tone={checked.runtime_engine.compat_check ? 'warn' : 'info'} title={`后续推理建议 · ${checked.runtime_engine.label}`}>
                   {checked.runtime_engine.compat_check && <p><strong>{checked.runtime_engine.compat_check}</strong></p>}
                   <p>{checked.runtime_engine.reason}</p>
                   <p className="muted">要求：{checked.runtime_engine.requirements}</p>
@@ -547,7 +547,7 @@ export default function App() {
               {advanced && stage === 1 && <Notice title="量化与速度如何选择">NInfer 的三值与 GSQ Q2 需要现成来源；HF GPTQ 可校准为 2/3/4/8 bit。不同路线使用不同引擎，低位宽不保证更快或保持质量。</Notice>}
               {stage === 3 && <>
                 <Notice title={advanced ? '配置确认后，点击下方开始转换' : building ? '自动任务正在运行' : '查看结果并启动使用'}>保持本机服务运行。流程会自动完成越狱（如选择）、量化、GPU 验证与实测（如开启）；通过后可直接在本页启动模型 API。</Notice>
-                {checked?.runtime_engine && <Notice tone="info" title={`产物运行路线 · 配套引擎，另可选 ${checked.runtime_engine.label}`}>
+                {!actualConfig.target.startsWith('hf_') && checked?.runtime_engine && <Notice tone="info" title={`产物运行路线 · 配套引擎，另可选 ${checked.runtime_engine.label}`}>
                   <p>本页「启动模型服务」与 scripts/run.bat 用配套引擎运行本次产物（.ninfer→NInfer，AWQ/GPTQ→HF）。{checked.runtime_engine.label} 需单独下载：<a href={checked.runtime_engine.url} target="_blank" rel="noreferrer">{checked.runtime_engine.url}</a>。{checked.runtime_engine.steps}</p>
                 </Notice>}
                 {pollError && <Notice tone="warn">{pollError}</Notice>}

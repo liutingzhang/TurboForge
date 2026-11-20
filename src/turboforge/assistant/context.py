@@ -99,7 +99,7 @@ def validate_chat(body: dict) -> dict:
 
 
 def business_snapshot(manager, session, body: dict) -> dict:
-    """Only existing owned build IDs can read authoritative private build details."""
+    """Restore task evidence only with the browser's durable ownership capability."""
     include = body.get("include", {})
     build_id = body.get("build_id")
     snapshot = {"captured_at": datetime.now(timezone.utc).isoformat(), "build_id": build_id,
@@ -113,11 +113,12 @@ def business_snapshot(manager, session, body: dict) -> dict:
         if include.get("recent_logs"):
             raise AssistantError("no_build", "尚无本次任务日志可附带")
         return snapshot
-    if build_id not in session.builds:
-        raise AssistantError("build_forbidden", "该任务不属于本助手会话；请在当前页面重新创建任务", 403)
+    if build_id not in session.builds and not manager.assistant_owned(build_id, session.owner):
+        raise AssistantError("build_forbidden", "该任务不属于本助手浏览器；请在创建任务的浏览器中打开", 403)
     record = manager.status(build_id)
     if record is None:
         raise AssistantError("build_missing", "本次任务记录已不存在", 404)
+    session.builds.add(build_id)
     snapshot["authority"] = "backend_build_record"
     if include.get("business_summary", True):
         manifest = record.get("manifest") or {}
@@ -125,9 +126,11 @@ def business_snapshot(manager, session, body: dict) -> dict:
         plan = manifest.get("plan") or {}
         source = manifest.get("source") or {}
         snapshot["business"] = clean({"status": record.get("status"), "finished": record.get("finished"),
+            "error": record.get("error"),
             "model": {k: source.get(k) for k in ("architecture", "input_kind", "weight_precision")},
             "config": {k: config.get(k) for k in ("target", "jailbreak", "quantization", "runtime", "run_validation", "run_benchmark")},
-            "diagnostics": plan.get("diagnostics", []), "serving": plan.get("serving"),
+            "diagnostics": plan.get("diagnostics", []), "blocking_diagnostics": manifest.get("plan_diagnostics", []),
+            "history": (manifest.get("history") or [])[-12:], "serving": plan.get("serving"),
             "performance": manager.report(build_id, "performance"), "quality": manager.report(build_id, "quality")}, secrets)
     if include.get("recent_logs"):
         log = redact(manager.log(build_id) or "", secrets)

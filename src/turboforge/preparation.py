@@ -14,24 +14,45 @@ from .local_endpoint import default_serving_port
 from .model_sources import ModelResolver, repo_id, normalize_reference
 
 
-def check_config_support(config: dict) -> None:
-    """Check downloaded metadata before fetching multi-GiB model weights."""
+def available_ninfer_recipes(recipes: list) -> list:
+    """Exclude adapters absent from the verified local tool installation."""
+    if not any(recipe.recipe.startswith("qwen3_5_gguf") for recipe in recipes):
+        return recipes
+    from .bootstrap import local_tools
+    try:
+        tools = local_tools()
+        adapted = bool(tools and (tools[0] / "tools/convert/qwen3_5_gguf.py").is_file())
+    except (ValueError, OSError, RuntimeError):
+        adapted = False
+    return [recipe for recipe in recipes
+            if adapted or not recipe.recipe.startswith("qwen3_5_gguf")]
+
+
+def _config_ninfer_recipes(config: dict) -> list:
     from .backends.registry import recipes_for, geometry_admits
     from .domain import InputKind
-    from .bootstrap import local_tools
-    hidden = hidden_size(config)
-    recipes = [recipe for architecture in architecture_names(config)
-               for recipe in recipes_for(InputKind.SAFETENSORS, architecture)
-               if geometry_admits(recipe, hidden)]
-    if not recipes:
-        from .backends.hf_quantization import recipes_for_config
-        if recipes_for_config(config):
-            return
-        raise ValueError("此模型架构或几何没有已接入转换路径；尚未下载大体积权重，请更换支持的模型")
-    if all(recipe.recipe.startswith("qwen3_5_gguf") for recipe in recipes):
-        tools = local_tools()
-        if not tools or not (tools[0] / "tools/convert/qwen3_5_gguf.py").is_file():
-            raise ValueError("此小模型需要适配引擎；请使用包含适配引擎的 Windows 整合包。已在下载模型权重前停止。")
+    return [recipe for architecture in architecture_names(config)
+            for recipe in recipes_for(InputKind.SAFETENSORS, architecture)
+            if geometry_admits(recipe, hidden_size(config))]
+
+
+def check_config_support(config: dict) -> None:
+    """Check usable routes before fetching multi-GiB model weights."""
+    recipes = _config_ninfer_recipes(config)
+    if available_ninfer_recipes(recipes):
+        return
+    from .backends.hf_quantization import recipes_for_config
+    if recipes_for_config(config):
+        return
+    if recipes:
+        raise ValueError("此小模型需要适配引擎且没有可用 HF 路线；请使用包含适配引擎的 Windows 整合包。已在下载模型权重前停止。")
+    raise ValueError("此模型架构或几何没有已接入转换路径；尚未下载大体积权重，请更换支持的模型")
+
+
+def _require_explicit_hf(config: dict) -> None:
+    from .backends.hf_quantization import recipes_for_config
+    if recipes_for_config(config):
+        raise ValueError("当前输入仅有 HF 路线可用，请明确选择 HF AWQ/GPTQ 方案与位宽；auto 不会选择缺失适配器的 NInfer，也不会猜测 HF 位宽。已在下载权重和引擎前停止。")
 
 
 def prepare(model: str, options: dict, emit: Emit) -> ForgeConfig:
@@ -75,6 +96,10 @@ def prepare(model: str, options: dict, emit: Emit) -> ForgeConfig:
         if selected_recipe and (not any(arch in selected_recipe.architectures for arch in architecture_names(config))
                                 or not geometry_admits(selected_recipe, hidden_size(config))):
             raise ValueError("指定量化方案与仓库模型不兼容，已在下载权重前停止")
+        if selected_recipe and not available_ninfer_recipes([selected_recipe]):
+            raise ValueError("指定 NInfer 方案缺少已验证适配器，请选择可用 HF 方案或安装适配引擎；不会自动替换，已在下载权重前停止")
+        if preliminary.target == "auto" and not available_ninfer_recipes(_config_ninfer_recipes(config)):
+            _require_explicit_hf(config)
     emit("先检查系统、显卡与驱动兼容性")
     cuda_package()
     emit("识别模型并自动获取必需的分词器与来源文件")
@@ -108,7 +133,10 @@ def prepare(model: str, options: dict, emit: Emit) -> ForgeConfig:
         emit("已选择 HF 原生 AWQ/GPTQ 路线，将自动准备独立环境；不下载 NInfer 引擎。输出："+config.output_dir)
         return config
     from .planner import ForgePlanner
-    candidates = [recipe for recipe in ForgePlanner().available_recipes(inspected) if recipe.engine == "ninfer"]
+    candidates = available_ninfer_recipes(
+        [recipe for recipe in ForgePlanner().available_recipes(inspected) if recipe.engine == "ninfer"])
+    if selected_recipe and not available_ninfer_recipes([selected_recipe]):
+        raise ValueError("指定 NInfer 方案缺少已验证适配器，请选择可用 HF 方案或安装适配引擎；不会自动替换")
     for name, value in preliminary.sources.items():
         if name in resolved.sources and Path(value).expanduser().resolve() != Path(resolved.sources[name]).expanduser().resolve():
             raise ValueError("导入输入与附加来源冲突，请重新选择主输入")
@@ -118,7 +146,9 @@ def prepare(model: str, options: dict, emit: Emit) -> ForgeConfig:
         if not Path(value).expanduser().exists():
             raise ValueError(f"附加来源 {name} 不存在，请选择本机文件或目录")
     if not runnable:
-        raise ValueError("此输入没有可直接执行的转换路径。该架构可能只支持 GGUF 导入，请直接提供其受支持的模型格式；已在下载引擎前停止。")
+        if preliminary.target == "auto" and not provided:
+            _require_explicit_hf(inspected.config)
+        raise ValueError("此输入没有可直接执行的转换路径。可能缺少已验证适配器，或该架构只支持 GGUF 导入；请提供受支持的原始模型或适配引擎，已在下载引擎前停止。")
     if preliminary.target == "auto" and "quantized" in resolved.sources and sum("quantized" in r.extra_sources for r in runnable) > 1:
         raise ValueError("此架构有多种 NVFP4 布局，请明确选择与检查点匹配的导入方案；不会猜测生产工具")
     if preliminary.target != "auto":
@@ -134,7 +164,13 @@ def prepare(model: str, options: dict, emit: Emit) -> ForgeConfig:
             raise ValueError("GSQ 原生 2-bit 只导入已有 Q2_0 专家权重，不能把普通 Q4 等文件在此路线改成 2-bit")
     if options.get("original_model") and preliminary.jailbreak != "none":
         raise ValueError("导入量化权重不能叠加越狱，请使用原始模型执行越狱后重新量化")
-    small_model = bool(candidates) and all(recipe.recipe.startswith("qwen3_5_gguf") for recipe in candidates)
+    if preliminary.target == "auto":
+        from .selection import auto_select
+        selection_config = ForgeConfig.from_dict({**asdict(preliminary), "sources": provided})
+        # Pin the filtered choice so the later planner cannot reintroduce an
+        # unavailable adapter from the unfiltered registry.
+        preliminary.target = auto_select(selection_config, inspected, runnable, []).recipe
+    small_model = preliminary.target.startswith("qwen3_5_gguf")
     emit("准备匹配的转换器和推理引擎")
     source, engine = ensure_tools(root, emit, small_model=small_model)
     emit("检查并准备所需依赖")

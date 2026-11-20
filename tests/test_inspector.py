@@ -107,6 +107,71 @@ class SafetensorsInspectionTest(unittest.TestCase):
         with self.assertRaisesRegex(SafetensorsFormatError, "offsets"):
             read_tensor_summaries(path)
 
+    def test_metadata_only_with_missing_base_shards_still_finds_actual_head(self) -> None:
+        write_config(self.root)
+        (self.root / "model.safetensors.index.json").write_text(json.dumps({
+            "weight_map": {"model.weight": "not-downloaded.safetensors"},
+        }), encoding="utf-8")
+        write_safetensors(self.root / "head.safetensors", {"mtp.fc.weight": ("BF16", [2, 2])})
+        result = self.inspector.inspect(self.root, metadata_only=True)
+        self.assertEqual(result.weight_precision, "metadata_only")
+        self.assertTrue(result.speculative_components["mtp"]["detected"])
+        self.assertFalse(result.speculative_components["mtp"]["compatibility_verified"])
+        self.assertEqual({item["path"] for item in result.files}, {"head.safetensors"})
+
+    def test_metadata_only_config_and_filename_are_not_head_evidence(self) -> None:
+        write_config(self.root, num_mtp_layers=1, dflash2_config={"architectures": ["DFlash2DraftModel"]})
+        write_safetensors(self.root / "mtp-dflash2.safetensors", {"weight": ("BF16", [2, 2])})
+        result = self.inspector.inspect(self.root, metadata_only=True)
+        self.assertFalse(result.speculative_components.get("mtp", {}).get("detected", False))
+        self.assertFalse(result.speculative_components.get("dflash2", {}).get("detected", False))
+        self.assertEqual(result.speculative_components["training"], "not_supported")
+        self.assertIn("mtp_hint", result.speculative_components)
+
+    def test_metadata_only_corrupt_present_head_is_explicitly_gated(self) -> None:
+        write_config(self.root)
+        (self.root / "head.safetensors").write_bytes(b"broken")
+        result = self.inspector.inspect(self.root, metadata_only=True)
+        self.assertFalse(result.usable)
+        self.assertEqual(result.diagnostics[0].code, "speculative-inspection-unverified")
+        self.assertEqual(result.diagnostics[0].severity, Severity.ERROR)
+        self.assertEqual(result.config["model_type"], "qwen2")
+
+    def test_metadata_only_reads_existing_indexed_subdirectory_head(self) -> None:
+        write_config(self.root)
+        nested = self.root / "shards"
+        nested.mkdir()
+        write_safetensors(nested / "head.safetensors", {"dflash2.fc.weight": ("BF16", [2, 2])})
+        (self.root / "model.safetensors.index.json").write_text(json.dumps({
+            "weight_map": {"model.weight": "missing.safetensors", "dflash2.fc.weight": "shards/head.safetensors"},
+        }), encoding="utf-8")
+        result = self.inspector.inspect(self.root, metadata_only=True)
+        self.assertTrue(result.speculative_components["dflash2"]["detected"])
+        self.assertFalse(result.speculative_components["dflash2"]["compatibility_verified"])
+        self.assertEqual({item["path"] for item in result.files}, {"shards/head.safetensors"})
+
+    def test_metadata_only_gates_indexed_heads_missing_from_actual_weights(self) -> None:
+        write_config(self.root)
+        write_safetensors(self.root / "model.safetensors", {"weight": ("BF16", [2, 2])})
+        for component in ("mtp", "dflash2"):
+            for shard in ("missing.safetensors", "model.safetensors"):
+                with self.subTest(component=component, shard=shard):
+                    (self.root / "model.safetensors.index.json").write_text(json.dumps({
+                        "weight_map": {component + ".fc.weight": shard},
+                    }), encoding="utf-8")
+                    result = self.inspector.inspect(self.root, metadata_only=True)
+                    self.assertFalse(result.usable)
+                    self.assertIn("speculative-inspection-unverified", {d.code for d in result.diagnostics})
+                    self.assertFalse(result.speculative_components.get(component, {}).get("detected", False))
+
+    def test_metadata_only_does_not_follow_unsafe_index_references(self) -> None:
+        write_config(self.root)
+        (self.root / "model.safetensors.index.json").write_text(json.dumps({
+            "weight_map": {"mtp.fc.weight": "../external.safetensors"},
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "unsafe shard reference"):
+            self.inspector.inspect(self.root, metadata_only=True)
+
     def test_adapter_directory_is_not_a_base_model(self) -> None:
         (self.root / "adapter_config.json").write_text("{}", encoding="utf-8")
         write_safetensors(self.root / "adapter_model.safetensors", {"lora_A": ("BF16", [2, 2])})
